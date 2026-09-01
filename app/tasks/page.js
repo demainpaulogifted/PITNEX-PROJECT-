@@ -1,21 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Header from "@/components/Header";
 
-const THE_INDEX_URL = "https://theindex.name.ng";
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const DAILY_LIMIT = 6;
+const DEFAULT_REWARD = 180;
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState([]);
+  const [completedToday, setCompletedToday] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [screenshot, setScreenshot] = useState(null);
-
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -26,452 +20,477 @@ export default function TasksPage() {
       setLoading(true);
       setError("");
 
-      const response = await fetch("/api/tasks", {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        "/api/tasks",
+        {
+          cache: "no-store",
+        }
+      );
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
+      if (!response.ok) {
         throw new Error(
-          data.error || "Unable to load tasks."
+          data.error ||
+            "Unable to load tasks."
         );
       }
 
-      setTasks(data.tasks || []);
-    } catch (err) {
-      console.error(err);
+      setTasks(
+        Array.isArray(data.tasks)
+          ? data.tasks
+          : []
+      );
 
+      setCompletedToday(
+        Number(data.completedToday || 0)
+      );
+    } catch (err) {
       setError(
-        err.message || "Unable to load tasks."
+        err.message ||
+          "Unable to load tasks."
       );
     } finally {
       setLoading(false);
     }
   }
 
-  function openTask(task) {
-    setSelectedTask(task);
-    setScreenshot(null);
-    setMessage("");
-    setError("");
-  }
+  function openArticle(url) {
+    if (!url) return;
 
-  function closeTask() {
-    if (submitting) return;
-
-    setSelectedTask(null);
-    setScreenshot(null);
-    setMessage("");
-    setError("");
-  }
-
-  function handleScreenshotChange(event) {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image.");
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setError(
-        "Screenshot must be 5MB or smaller."
-      );
-      return;
-    }
-
-    setScreenshot(file);
-    setError("");
-    setMessage("");
-  }
-
-  async function submitProof() {
-    if (!selectedTask) return;
-
-    if (!screenshot) {
-      setError(
-        "Please select your screenshot first."
-      );
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      setError("");
-      setMessage("");
-
-      /*
-        Temporary proof URL.
-
-        The private screenshot storage upload
-        will be connected next.
-      */
-      const proofImageUrl = screenshot.name;
-
-      const response = await fetch(
-        "/api/tasks/submit",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            taskId: selectedTask.id,
-            proofImageUrl,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error ||
-            "Unable to submit proof."
-        );
-      }
-
-      /*
-        Immediately update the task locally.
-      */
-      setTasks((currentTasks) =>
-        currentTasks.map((task) =>
-          task.id === selectedTask.id
-            ? {
-                ...task,
-                status: "PENDING",
-              }
-            : task
-        )
-      );
-
-      setSelectedTask(null);
-      setScreenshot(null);
-
-      setMessage(
-        "Proof submitted successfully. Your task is now pending review."
-      );
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err.message ||
-          "Unable to submit proof."
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function formatReward(reward) {
-    return `₦${Number(
-      reward || 0
-    ).toLocaleString("en-NG", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
-
-  function getStatusLabel(status) {
-    switch (status) {
-      case "PENDING":
-        return "Pending Review";
-
-      case "COMPLETED":
-        return "Completed";
-
-      default:
-        return "Available";
-    }
-  }
-
-  if (loading) {
-    return (
-      <>
-        <Header />
-
-        <main className="simple-page">
-          <div className="page-heading">
-            <span>Earn more</span>
-
-            <h1>Available Tasks</h1>
-
-            <p>
-              Loading available tasks...
-            </p>
-          </div>
-        </main>
-      </>
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer"
     );
   }
 
+  const remaining =
+    Math.max(
+      0,
+      DAILY_LIMIT - completedToday
+    );
+
   return (
-    <>
-      <Header />
-
-      <main className="simple-page">
-
-        <div className="page-heading">
-          <span>Earn more</span>
-
-          <h1>Available Tasks</h1>
-
-          <p>
-            Complete tasks and earn money directly
-            into your Pitnex wallet.
+    <main
+      style={{
+        minHeight: "100vh",
+        padding: "24px 16px 48px",
+        background: "#f7f7f7",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "900px",
+          margin: "0 auto",
+        }}
+      >
+        <header
+          style={{
+            marginBottom: "24px",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "13px",
+              fontWeight: 700,
+              opacity: 0.6,
+            }}
+          >
+            PITNEX EARN
           </p>
-        </div>
 
-        {message && (
-          <div className="task-message task-success">
-            {message}
-          </div>
-        )}
+          <h1
+            style={{
+              margin:
+                "8px 0 10px",
+              fontSize:
+                "clamp(28px, 7vw, 40px)",
+            }}
+          >
+            Available Tasks
+          </h1>
 
-        {error && (
-          <div className="task-message task-error">
-            {error}
-          </div>
-        )}
+          <p
+            style={{
+              margin: 0,
+              opacity: 0.7,
+              lineHeight: 1.5,
+            }}
+          >
+            Complete tasks, submit proof and earn
+            rewards after approval.
+          </p>
+        </header>
 
-        {!error && tasks.length === 0 && (
-          <div className="task-card">
+        <section
+          style={{
+            background: "#fff",
+            border:
+              "1px solid #e5e5e5",
+            borderRadius: "18px",
+            padding: "20px",
+            marginBottom: "24px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems: "center",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
             <div>
-              <h2>No tasks available</h2>
+              <strong>
+                Today's progress
+              </strong>
 
-              <p>
-                New earning tasks will appear here
-                when they become available.
+              <p
+                style={{
+                  margin:
+                    "6px 0 0",
+                  opacity: 0.7,
+                }}
+              >
+                {completedToday} of{" "}
+                {DAILY_LIMIT} tasks completed
               </p>
             </div>
+
+            <div
+              style={{
+                fontSize: "20px",
+                fontWeight: 800,
+              }}
+            >
+              {remaining} left
+            </div>
           </div>
+
+          <div
+            style={{
+              height: "8px",
+              background:
+                "#eaeaea",
+              borderRadius: "999px",
+              overflow: "hidden",
+              marginTop: "16px",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(
+                  100,
+                  (completedToday /
+                    DAILY_LIMIT) *
+                    100
+                )}%`,
+                height: "100%",
+                background:
+                  "#111",
+                borderRadius:
+                  "999px",
+              }}
+            />
+          </div>
+        </section>
+
+        {loading && (
+          <section
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "18px",
+              border:
+                "1px solid #e5e5e5",
+            }}
+          >
+            Loading available tasks...
+          </section>
         )}
 
-        <div className="tasks-list">
-          {tasks.map((task) => {
-            const isPending =
-              task.status === "PENDING";
+        {!loading && error && (
+          <section
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "18px",
+              border:
+                "1px solid #e5e5e5",
+            }}
+          >
+            <strong>
+              Unable to load tasks
+            </strong>
 
-            const isCompleted =
-              task.status === "COMPLETED";
+            <p>{error}</p>
 
-            return (
-              <div
-                className="task-card"
-                key={task.id}
-              >
-                <div className="task-card-content">
+            <button
+              onClick={loadTasks}
+              style={{
+                padding:
+                  "12px 18px",
+                border: 0,
+                borderRadius:
+                  "10px",
+                cursor:
+                  "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Try again
+            </button>
+          </section>
+        )}
 
-                  <div>
-                    <span className="task-status">
-                      {getStatusLabel(
-                        task.status
-                      )}
-                    </span>
-
-                    <h2>{task.title}</h2>
-
-                    <p>
-                      Read the article on THE INDEX,
-                      like it, then submit a screenshot
-                      as proof.
-                    </p>
-                  </div>
-
-                  <strong className="task-reward">
-                    {formatReward(
-                      task.rewardNaira
-                    )}
-                  </strong>
-
-                </div>
-
-                <div className="task-actions">
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        !isPending &&
-                        !isCompleted
-                      ) {
-                        openTask(task);
-                      }
-                    }}
-                    disabled={
-                      isPending ||
-                      isCompleted
-                    }
-                    className="task-start-button"
-                  >
-                    {isCompleted
-                      ? "Completed"
-                      : isPending
-                      ? "Pending Review"
-                      : "Start Task"}
-                  </button>
-
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {selectedTask && (
-          <div className="task-modal-overlay">
-
-            <div className="task-modal">
-
-              <button
-                type="button"
-                className="task-modal-close"
-                onClick={closeTask}
-                disabled={submitting}
-                aria-label="Close"
-              >
-                ×
-              </button>
-
-              <span className="task-status">
-                EARN{" "}
-                {formatReward(
-                  selectedTask.rewardNaira
-                )}
-              </span>
-
+        {!loading &&
+          !error &&
+          tasks.length === 0 && (
+            <section
+              style={{
+                background: "#fff",
+                padding: "28px",
+                borderRadius: "18px",
+                border:
+                  "1px solid #e5e5e5",
+                textAlign: "center",
+              }}
+            >
               <h2>
-                {selectedTask.title}
+                No tasks available
               </h2>
 
-              <p>
-                Follow these steps carefully before
-                submitting your proof.
+              <p
+                style={{
+                  opacity: 0.7,
+                }}
+              >
+                Check back later for new
+                earning opportunities.
               </p>
+            </section>
+          )}
 
-              <div className="task-steps">
+        {!loading &&
+          !error &&
+          tasks.length > 0 && (
+            <div
+              style={{
+                display: "grid",
+                gap: "16px",
+              }}
+            >
+              {tasks.map((task) => {
+                const reward =
+                  Number(
+                    task.reward_kobo
+                  ) / 100 ||
+                  DEFAULT_REWARD;
 
-                <div className="task-step">
-                  <strong>1</strong>
-
-                  <div>
-                    <h3>
-                      Open THE INDEX
-                    </h3>
-
-                    <p>
-                      Open the article in a new tab.
-                    </p>
-
-                    <a
-                      href={
-                        selectedTask.articleUrl ||
-                        THE_INDEX_URL
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="task-link-button"
+                return (
+                  <article
+                    key={task.id}
+                    style={{
+                      background: "#fff",
+                      border:
+                        "1px solid #e5e5e5",
+                      borderRadius:
+                        "18px",
+                      padding: "20px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        alignItems:
+                          "flex-start",
+                        gap: "16px",
+                      }}
                     >
-                      Open Article
-                    </a>
-                  </div>
-                </div>
+                      <div>
+                        <span
+                          style={{
+                            display:
+                              "inline-block",
+                            fontSize:
+                              "12px",
+                            fontWeight:
+                              800,
+                            padding:
+                              "5px 9px",
+                            borderRadius:
+                              "999px",
+                            background:
+                              "#f0f0f0",
+                            marginBottom:
+                              "10px",
+                          }}
+                        >
+                          ARTICLE TASK
+                        </span>
 
-                <div className="task-step">
-                  <strong>2</strong>
+                        <h2
+                          style={{
+                            margin:
+                              "0 0 10px",
+                            fontSize:
+                              "21px",
+                          }}
+                        >
+                          {task.title}
+                        </h2>
 
-                  <div>
-                    <h3>
-                      Read & Like
-                    </h3>
+                        <p
+                          style={{
+                            margin: 0,
+                            lineHeight:
+                              1.6,
+                            opacity:
+                              0.75,
+                          }}
+                        >
+                          Read the article
+                          on THE INDEX,
+                          like it, take a
+                          screenshot and
+                          submit your proof.
+                        </p>
+                      </div>
 
-                    <p>
-                      Read the article and complete
-                      the required interaction.
-                    </p>
-                  </div>
-                </div>
+                      <div
+                        style={{
+                          flexShrink: 0,
+                          textAlign:
+                            "right",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize:
+                              "22px",
+                            fontWeight:
+                              900,
+                          }}
+                        >
+                          ₦
+                          {reward.toLocaleString()}
+                        </div>
 
-                <div className="task-step">
-                  <strong>3</strong>
+                        <small
+                          style={{
+                            opacity:
+                              0.6,
+                          }}
+                        >
+                          reward
+                        </small>
+                      </div>
+                    </div>
 
-                  <div>
-                    <h3>
-                      Take a Screenshot
-                    </h3>
-
-                    <p>
-                      Take a screenshot showing your
-                      completed interaction.
-                    </p>
-
-                    <label className="screenshot-button">
-                      Select Screenshot
-
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={
-                          handleScreenshotChange
+                    {task.article_url && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openArticle(
+                            task.article_url
+                          )
                         }
-                        hidden
-                        disabled={submitting}
-                      />
-                    </label>
-
-                    {screenshot && (
-                      <p className="selected-file">
-                        ✓ {screenshot.name}
-                      </p>
+                        disabled={
+                          remaining ===
+                          0
+                        }
+                        style={{
+                          width:
+                            "100%",
+                          marginTop:
+                            "20px",
+                          padding:
+                            "14px",
+                          border: 0,
+                          borderRadius:
+                            "12px",
+                          cursor:
+                            remaining ===
+                            0
+                              ? "not-allowed"
+                              : "pointer",
+                          fontWeight:
+                            800,
+                          fontSize:
+                            "15px",
+                          opacity:
+                            remaining ===
+                            0
+                              ? 0.5
+                              : 1,
+                        }}
+                      >
+                        Read Article & Earn ₦
+                        {reward.toLocaleString()}
+                      </button>
                     )}
-                  </div>
-                </div>
-
-                <div className="task-step">
-                  <strong>4</strong>
-
-                  <div>
-                    <h3>
-                      Submit Proof
-                    </h3>
-
-                    <p>
-                      Submit your screenshot for
-                      admin review.
-                    </p>
-
-                    <button
-                      type="button"
-                      className="task-submit-button"
-                      onClick={submitProof}
-                      disabled={
-                        !screenshot ||
-                        submitting
-                      }
-                    >
-                      {submitting
-                        ? "Submitting..."
-                        : "Submit Proof"}
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              {error && (
-                <div className="task-message task-error">
-                  {error}
-                </div>
-              )}
-
+                  </article>
+                );
+              })}
             </div>
+          )}
 
-          </div>
-        )}
+        <section
+          style={{
+            marginTop: "24px",
+            padding: "18px",
+            borderRadius: "16px",
+            background: "#fff",
+            border:
+              "1px solid #e5e5e5",
+          }}
+        >
+          <strong>
+            How earning works
+          </strong>
 
-      </main>
-    </>
+          <ol
+            style={{
+              lineHeight: 1.8,
+              paddingLeft: "22px",
+              marginBottom: 0,
+            }}
+          >
+            <li>
+              Choose an available task.
+            </li>
+            <li>
+              Check the reward before starting.
+            </li>
+            <li>
+              Open THE INDEX in another tab.
+            </li>
+            <li>
+              Complete the required action.
+            </li>
+            <li>
+              Select your screenshot from your device.
+            </li>
+            <li>
+              Submit your proof.
+            </li>
+            <li>
+              Wait for admin approval.
+            </li>
+            <li>
+              Approved rewards are credited to your wallet.
+            </li>
+          </ol>
+        </section>
+      </div>
+    </main>
   );
 }
