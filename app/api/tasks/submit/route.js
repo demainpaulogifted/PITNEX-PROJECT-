@@ -6,20 +6,11 @@ const DEVELOPMENT_USER_ID =
 
 export async function POST(request) {
   try {
-    if (!DEVELOPMENT_USER_ID) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Development user is not configured.",
-        },
-        { status: 500 }
-      );
-    }
-
     const body = await request.json();
 
     const taskId = body.taskId;
-    const proofImageUrl = body.proofImageUrl || null;
+    const proofImageUrl =
+      body.proofImageUrl || null;
 
     if (!taskId) {
       return NextResponse.json(
@@ -31,9 +22,17 @@ export async function POST(request) {
       );
     }
 
-    /*
-      Check that the task exists and is active.
-    */
+    if (!DEVELOPMENT_USER_ID) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "PITNEX user authentication is not configured yet.",
+        },
+        { status: 503 }
+      );
+    }
+
     const tasks = await prisma.$queryRaw`
       SELECT
         id,
@@ -61,63 +60,60 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "This task is no longer available.",
+          error:
+            "This task is no longer available.",
         },
         { status: 400 }
       );
     }
 
-    /*
-      Check whether this user has already submitted
-      or completed this task.
-    */
     const existing = await prisma.$queryRaw`
       SELECT
         id,
         status
       FROM pitnex_user_tasks
-      WHERE user_id = ${DEVELOPMENT_USER_ID}::uuid
-        AND task_id = ${taskId}::uuid
+      WHERE user_id =
+        ${DEVELOPMENT_USER_ID}::uuid
+        AND task_id =
+        ${taskId}::uuid
       LIMIT 1
     `;
 
     if (existing.length) {
       const status = existing[0].status;
 
-      if (
-        status === "COMPLETED" ||
-        status === "PENDING"
-      ) {
+      if (status === "COMPLETED") {
         return NextResponse.json(
           {
             success: false,
             error:
-              status === "COMPLETED"
-                ? "You have already completed this task."
-                : "This task is already pending review.",
+              "You have already completed this task.",
           },
           { status: 409 }
         );
       }
-    }
 
-    /*
-      If a user-task record already exists and is still
-      available, update it.
-    */
-    if (existing.length) {
+      if (status === "PENDING") {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This task is already pending review.",
+          },
+          { status: 409 }
+        );
+      }
+
       await prisma.$executeRaw`
         UPDATE pitnex_user_tasks
         SET
           status = 'PENDING',
           proof_image_url = ${proofImageUrl},
           submitted_at = NOW()
-        WHERE id = ${existing[0].id}::uuid
+        WHERE id =
+          ${existing[0].id}::uuid
       `;
     } else {
-      /*
-        Otherwise create the user's task record.
-      */
       await prisma.$executeRaw`
         INSERT INTO pitnex_user_tasks (
           user_id,
