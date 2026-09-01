@@ -1,166 +1,504 @@
-import Link from "next/link";
-import {
-  Flame,
-  ListChecks,
-  Package,
-  Landmark
-} from "lucide-react";
+"use client";
 
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import PhonePreview from "@/components/PhonePreview";
 
-export default function Home() {
-  const features = [
-    {
-      icon: Flame,
-      title: "Daily Check-in",
-      text: "Check in every 24 hours and earn ₦1,000 instantly."
-    },
-    {
-      icon: ListChecks,
-      title: "Simple Tasks",
-      text: "Complete available tasks and earn rewards."
-    },
-    {
-      icon: Package,
-      title: "Investment Packages",
-      text: "Explore available Elite and Premium packages."
-    },
-    {
-      icon: Landmark,
-      title: "Bank Withdrawals",
-      text: "Withdraw your available balance to a Nigerian bank account during the global withdrawal window."
+const THE_INDEX_URL = "https://theindex.name.ng";
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+export default function TasksPage() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [screenshot, setScreenshot] = useState(null);
+
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  async function loadTasks() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch("/api/tasks", {
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "Unable to load tasks."
+        );
+      }
+
+      setTasks(data.tasks || []);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message || "Unable to load tasks."
+      );
+    } finally {
+      setLoading(false);
     }
-  ];
+  }
+
+  function openTask(task) {
+    setSelectedTask(task);
+    setScreenshot(null);
+    setMessage("");
+    setError("");
+  }
+
+  function closeTask() {
+    if (submitting) return;
+
+    setSelectedTask(null);
+    setScreenshot(null);
+    setMessage("");
+    setError("");
+  }
+
+  function handleScreenshotChange(event) {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image.");
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setError(
+        "Screenshot must be 5MB or smaller."
+      );
+      return;
+    }
+
+    setScreenshot(file);
+    setError("");
+    setMessage("");
+  }
+
+  async function uploadScreenshot() {
+    const formData = new FormData();
+
+    formData.append("file", screenshot);
+
+    const response = await fetch(
+      "/api/tasks/upload",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.error ||
+          "Unable to upload screenshot."
+      );
+    }
+
+    return data.url;
+  }
+
+  async function submitProof() {
+    if (!selectedTask) return;
+
+    if (!screenshot) {
+      setError(
+        "Please select your screenshot first."
+      );
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError("");
+      setMessage("");
+
+      /*
+        1. Upload the actual screenshot.
+      */
+      const proofImageUrl =
+        await uploadScreenshot();
+
+      /*
+        2. Submit the task with the uploaded
+           screenshot URL.
+      */
+      const response = await fetch(
+        "/api/tasks/submit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            taskId: selectedTask.id,
+            proofImageUrl,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Unable to submit proof."
+        );
+      }
+
+      /*
+        3. Change the task to pending locally.
+      */
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === selectedTask.id
+            ? {
+                ...task,
+                status: "PENDING",
+              }
+            : task
+        )
+      );
+
+      setSelectedTask(null);
+      setScreenshot(null);
+
+      setMessage(
+        "Proof submitted successfully. Your task is now pending review."
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "Unable to submit proof."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function formatReward(reward) {
+    return `₦${Number(
+      reward || 0
+    ).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  function getStatusLabel(status) {
+    switch (status) {
+      case "PENDING":
+        return "Pending Review";
+
+      case "COMPLETED":
+        return "Completed";
+
+      default:
+        return "Available";
+    }
+  }
+
+  if (loading) {
+    return (
+      <>
+        <Header />
+
+        <main className="simple-page">
+          <div className="page-heading">
+            <span>Earn more</span>
+
+            <h1>Available Tasks</h1>
+
+            <p>
+              Loading available tasks...
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
       <Header />
 
-      <main>
+      <main className="simple-page">
 
-        {/* HERO */}
+        <div className="page-heading">
+          <span>Earn more</span>
 
-        <section className="hero">
-
-          <div className="hero-content">
-
-            <div className="hero-badge">
-              <span></span>
-              Nigeria's Smartest Earn Platform
-            </div>
-
-            <h1>
-              Earn Daily.
-              <br />
-              <span>Grow Smarter</span>
-              <br />
-              With Pitnex
-            </h1>
-
-            <p>
-              Complete simple tasks, check in daily,
-              join exclusive packages and withdraw
-              straight to your Nigerian bank account.
-            </p>
-
-            <div className="hero-buttons">
-
-              <Link
-                href="/dashboard"
-                className="primary-button"
-              >
-                Start Earning Free
-              </Link>
-
-              <Link
-                href="/packages"
-                className="secondary-button"
-              >
-                View Packages
-              </Link>
-
-            </div>
-
-          </div>
-
-          <PhonePreview />
-
-        </section>
-
-
-        {/* FEATURES */}
-
-        <section className="features">
-
-          <div className="section-heading">
-
-            <h2>
-              Everything you need to earn
-            </h2>
-
-            <p>
-              Simple tools designed for Nigerians
-              who want real results.
-            </p>
-
-          </div>
-
-          <div className="feature-grid">
-
-            {features.map((feature) => {
-
-              const Icon = feature.icon;
-
-              return (
-                <div
-                  className="feature-card"
-                  key={feature.title}
-                >
-
-                  <div className="feature-icon">
-                    <Icon />
-                  </div>
-
-                  <h3>{feature.title}</h3>
-
-                  <p>{feature.text}</p>
-
-                </div>
-              );
-            })}
-
-          </div>
-
-        </section>
-
-
-        {/* CTA */}
-
-        <section className="cta">
-
-          <h2>
-            Ready to start earning?
-          </h2>
+          <h1>Available Tasks</h1>
 
           <p>
-            Create your free Pitnex account
-            and get started.
+            Complete tasks and earn money directly
+            into your Pitnex wallet.
           </p>
+        </div>
 
-          <Link
-            href="/dashboard"
-            className="primary-button"
-          >
-            Create Free Account
-          </Link>
+        {message && (
+          <div className="task-message task-success">
+            {message}
+          </div>
+        )}
 
-        </section>
+        {error && (
+          <div className="task-message task-error">
+            {error}
+          </div>
+        )}
+
+        {!error && tasks.length === 0 && (
+          <div className="task-card">
+            <div>
+              <h2>No tasks available</h2>
+
+              <p>
+                New earning tasks will appear here
+                when they become available.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="tasks-list">
+          {tasks.map((task) => {
+            const isPending =
+              task.status === "PENDING";
+
+            const isCompleted =
+              task.status === "COMPLETED";
+
+            return (
+              <div
+                className="task-card"
+                key={task.id}
+              >
+                <div className="task-card-content">
+
+                  <div>
+                    <span className="task-status">
+                      {getStatusLabel(
+                        task.status
+                      )}
+                    </span>
+
+                    <h2>{task.title}</h2>
+
+                    <p>
+                      Read the article on THE INDEX,
+                      like it, then submit a screenshot
+                      as proof.
+                    </p>
+                  </div>
+
+                  <strong className="task-reward">
+                    {formatReward(
+                      task.rewardNaira
+                    )}
+                  </strong>
+
+                </div>
+
+                <div className="task-actions">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        !isPending &&
+                        !isCompleted
+                      ) {
+                        openTask(task);
+                      }
+                    }}
+                    disabled={
+                      isPending ||
+                      isCompleted
+                    }
+                    className="task-start-button"
+                  >
+                    {isCompleted
+                      ? "Completed"
+                      : isPending
+                      ? "Pending Review"
+                      : "Start Task"}
+                  </button>
+
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {selectedTask && (
+          <div className="task-modal-overlay">
+
+            <div className="task-modal">
+
+              <button
+                type="button"
+                className="task-modal-close"
+                onClick={closeTask}
+                disabled={submitting}
+                aria-label="Close"
+              >
+                ×
+              </button>
+
+              <span className="task-status">
+                EARN{" "}
+                {formatReward(
+                  selectedTask.rewardNaira
+                )}
+              </span>
+
+              <h2>
+                {selectedTask.title}
+              </h2>
+
+              <p>
+                Follow these steps carefully before
+                submitting your proof.
+              </p>
+
+              <div className="task-steps">
+
+                <div className="task-step">
+                  <strong>1</strong>
+
+                  <div>
+                    <h3>
+                      Open THE INDEX
+                    </h3>
+
+                    <p>
+                      Open the article in a new tab.
+                    </p>
+
+                    <a
+                      href={
+                        selectedTask.articleUrl ||
+                        THE_INDEX_URL
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="task-link-button"
+                    >
+                      Open Article
+                    </a>
+                  </div>
+                </div>
+
+                <div className="task-step">
+                  <strong>2</strong>
+
+                  <div>
+                    <h3>
+                      Read & Like
+                    </h3>
+
+                    <p>
+                      Read the article and complete
+                      the required interaction.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="task-step">
+                  <strong>3</strong>
+
+                  <div>
+                    <h3>
+                      Take a Screenshot
+                    </h3>
+
+                    <p>
+                      Take a screenshot showing your
+                      completed interaction.
+                    </p>
+
+                    <label className="screenshot-button">
+                      Select Screenshot
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={
+                          handleScreenshotChange
+                        }
+                        hidden
+                        disabled={submitting}
+                      />
+                    </label>
+
+                    {screenshot && (
+                      <p className="selected-file">
+                        ✓ {screenshot.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="task-step">
+                  <strong>4</strong>
+
+                  <div>
+                    <h3>
+                      Submit Proof
+                    </h3>
+
+                    <p>
+                      Submit your screenshot for
+                      admin review.
+                    </p>
+
+                    <button
+                      type="button"
+                      className="task-submit-button"
+                      onClick={submitProof}
+                      disabled={
+                        !screenshot ||
+                        submitting
+                      }
+                    >
+                      {submitting
+                        ? "Uploading & Submitting..."
+                        : "Submit Proof"}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {error && (
+                <div className="task-message task-error">
+                  {error}
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        )}
 
       </main>
-
-      <Footer />
     </>
   );
 }
