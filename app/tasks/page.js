@@ -9,10 +9,13 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 export default function TasksPage() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [selectedTask, setSelectedTask] = useState(null);
   const [screenshot, setScreenshot] = useState(null);
+
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -38,6 +41,7 @@ export default function TasksPage() {
       setTasks(data.tasks || []);
     } catch (err) {
       console.error(err);
+
       setError(
         err.message || "Unable to load tasks."
       );
@@ -54,6 +58,8 @@ export default function TasksPage() {
   }
 
   function closeTask() {
+    if (submitting) return;
+
     setSelectedTask(null);
     setScreenshot(null);
     setMessage("");
@@ -71,7 +77,9 @@ export default function TasksPage() {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setError("Screenshot must be 5MB or smaller.");
+      setError(
+        "Screenshot must be 5MB or smaller."
+      );
       return;
     }
 
@@ -84,30 +92,87 @@ export default function TasksPage() {
     if (!selectedTask) return;
 
     if (!screenshot) {
-      setError("Please select your screenshot first.");
+      setError(
+        "Please select your screenshot first."
+      );
       return;
     }
 
-    /*
-      Temporary submission state.
+    try {
+      setSubmitting(true);
+      setError("");
+      setMessage("");
 
-      The real proof-submission API will be connected
-      in the next step after the task UI is confirmed.
-    */
-    setMessage(
-      "Proof selected successfully. Your submission system is being connected."
-    );
-    setError("");
+      /*
+        Temporary proof URL.
+
+        The private screenshot storage upload
+        will be connected next.
+      */
+      const proofImageUrl = screenshot.name;
+
+      const response = await fetch(
+        "/api/tasks/submit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            taskId: selectedTask.id,
+            proofImageUrl,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Unable to submit proof."
+        );
+      }
+
+      /*
+        Immediately update the task locally.
+      */
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === selectedTask.id
+            ? {
+                ...task,
+                status: "PENDING",
+              }
+            : task
+        )
+      );
+
+      setSelectedTask(null);
+      setScreenshot(null);
+
+      setMessage(
+        "Proof submitted successfully. Your task is now pending review."
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "Unable to submit proof."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function formatReward(reward) {
-    return `₦${Number(reward || 0).toLocaleString(
-      "en-NG",
-      {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }
-    )}`;
+    return `₦${Number(
+      reward || 0
+    ).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   }
 
   function getStatusLabel(status) {
@@ -131,8 +196,12 @@ export default function TasksPage() {
         <main className="simple-page">
           <div className="page-heading">
             <span>Earn more</span>
+
             <h1>Available Tasks</h1>
-            <p>Loading available tasks...</p>
+
+            <p>
+              Loading available tasks...
+            </p>
           </div>
         </main>
       </>
@@ -155,6 +224,12 @@ export default function TasksPage() {
             into your Pitnex wallet.
           </p>
         </div>
+
+        {message && (
+          <div className="task-message task-success">
+            {message}
+          </div>
+        )}
 
         {error && (
           <div className="task-message task-error">
@@ -192,7 +267,9 @@ export default function TasksPage() {
 
                   <div>
                     <span className="task-status">
-                      {getStatusLabel(task.status)}
+                      {getStatusLabel(
+                        task.status
+                      )}
                     </span>
 
                     <h2>{task.title}</h2>
@@ -217,12 +294,16 @@ export default function TasksPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!isPending && !isCompleted) {
+                      if (
+                        !isPending &&
+                        !isCompleted
+                      ) {
                         openTask(task);
                       }
                     }}
                     disabled={
-                      isPending || isCompleted
+                      isPending ||
+                      isCompleted
                     }
                     className="task-start-button"
                   >
@@ -248,13 +329,15 @@ export default function TasksPage() {
                 type="button"
                 className="task-modal-close"
                 onClick={closeTask}
+                disabled={submitting}
                 aria-label="Close"
               >
                 ×
               </button>
 
               <span className="task-status">
-                EARN {formatReward(
+                EARN{" "}
+                {formatReward(
                   selectedTask.rewardNaira
                 )}
               </span>
@@ -274,7 +357,9 @@ export default function TasksPage() {
                   <strong>1</strong>
 
                   <div>
-                    <h3>Open THE INDEX</h3>
+                    <h3>
+                      Open THE INDEX
+                    </h3>
 
                     <p>
                       Open the article in a new tab.
@@ -298,7 +383,9 @@ export default function TasksPage() {
                   <strong>2</strong>
 
                   <div>
-                    <h3>Read & Like</h3>
+                    <h3>
+                      Read & Like
+                    </h3>
 
                     <p>
                       Read the article and complete
@@ -311,7 +398,9 @@ export default function TasksPage() {
                   <strong>3</strong>
 
                   <div>
-                    <h3>Take a Screenshot</h3>
+                    <h3>
+                      Take a Screenshot
+                    </h3>
 
                     <p>
                       Take a screenshot showing your
@@ -328,6 +417,7 @@ export default function TasksPage() {
                           handleScreenshotChange
                         }
                         hidden
+                        disabled={submitting}
                       />
                     </label>
 
@@ -343,7 +433,9 @@ export default function TasksPage() {
                   <strong>4</strong>
 
                   <div>
-                    <h3>Submit Proof</h3>
+                    <h3>
+                      Submit Proof
+                    </h3>
 
                     <p>
                       Submit your screenshot for
@@ -354,20 +446,19 @@ export default function TasksPage() {
                       type="button"
                       className="task-submit-button"
                       onClick={submitProof}
-                      disabled={!screenshot}
+                      disabled={
+                        !screenshot ||
+                        submitting
+                      }
                     >
-                      Submit Proof
+                      {submitting
+                        ? "Submitting..."
+                        : "Submit Proof"}
                     </button>
                   </div>
                 </div>
 
               </div>
-
-              {message && (
-                <div className="task-message task-success">
-                  {message}
-                </div>
-              )}
 
               {error && (
                 <div className="task-message task-error">
