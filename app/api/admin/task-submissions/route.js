@@ -12,9 +12,7 @@ const SUPABASE_SERVICE_ROLE_KEY =
 
 const BUCKET = "pitnex-proofs";
 
-async function getSignedProofUrl(
-  proofPath
-) {
+async function getSignedProofUrl(proofPath) {
   if (
     !proofPath ||
     !SUPABASE_URL ||
@@ -23,14 +21,11 @@ async function getSignedProofUrl(
     return null;
   }
 
-  const cleanPath =
-    proofPath.startsWith(
-      `${BUCKET}/`
-    )
-      ? proofPath.slice(
-          BUCKET.length + 1
-        )
-      : proofPath;
+  const cleanPath = proofPath.startsWith(
+    `${BUCKET}/`
+  )
+    ? proofPath.slice(BUCKET.length + 1)
+    : proofPath;
 
   const response = await fetch(
     `${SUPABASE_URL}/storage/v1/object/sign/${BUCKET}/${cleanPath}`,
@@ -59,16 +54,13 @@ async function getSignedProofUrl(
     return null;
   }
 
-  const data =
-    await response.json();
+  const data = await response.json();
 
   if (!data.signedURL) {
     return null;
   }
 
-  return data.signedURL.startsWith(
-    "http"
-  )
+  return data.signedURL.startsWith("http")
     ? data.signedURL
     : `${SUPABASE_URL}/storage/v1${data.signedURL}`;
 }
@@ -95,8 +87,9 @@ export async function GET() {
           ut.status,
           ut.proof_image_url,
           ut.submitted_at,
+          ut.reviewed_at,
+          ut.reward_kobo,
           t.title AS task_title,
-          t.reward_kobo,
           p.email AS user_email
         FROM pitnex_user_tasks ut
         INNER JOIN pitnex_tasks t
@@ -117,12 +110,9 @@ export async function GET() {
 
       result.push({
         id: submission.id,
-        user_id:
-          submission.user_id,
-        task_id:
-          submission.task_id,
-        status:
-          submission.status,
+        user_id: submission.user_id,
+        task_id: submission.task_id,
+        status: submission.status,
         submitted_at:
           submission.submitted_at,
         task_title:
@@ -132,8 +122,7 @@ export async function GET() {
           submission.reward_kobo,
         user_email:
           submission.user_email,
-        proof_url:
-          proofUrl,
+        proof_url: proofUrl,
       });
     }
 
@@ -171,14 +160,12 @@ export async function PATCH(request) {
       );
     }
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const submissionId =
       body.submissionId;
 
-    const action =
-      body.action;
+    const action = body.action;
 
     if (!submissionId) {
       return NextResponse.json(
@@ -215,8 +202,9 @@ export async function PATCH(request) {
                 ut.user_id,
                 ut.task_id,
                 ut.status,
+                ut.reward_transaction_id,
                 t.title,
-                t.reward_kobo
+                ut.reward_kobo
               FROM pitnex_user_tasks ut
               INNER JOIN pitnex_tasks t
                 ON t.id = ut.task_id
@@ -231,8 +219,7 @@ export async function PATCH(request) {
             );
           }
 
-          const submission =
-            rows[0];
+          const submission = rows[0];
 
           if (
             submission.status !==
@@ -243,14 +230,18 @@ export async function PATCH(request) {
             );
           }
 
-          if (
-            action === "REJECT"
-          ) {
+          /*
+           * REJECT
+           */
+          if (action === "REJECT") {
             await tx.$executeRaw`
               UPDATE pitnex_user_tasks
               SET
                 status = 'REJECTED',
-                reviewed_at = NOW()
+                reviewed_at = NOW(),
+                reviewed_by =
+                  ${DEVELOPMENT_USER_ID}::uuid,
+                updated_at = NOW()
               WHERE id =
                 ${submissionId}::uuid
                 AND status = 'PENDING'
@@ -258,9 +249,17 @@ export async function PATCH(request) {
 
             return {
               action: "REJECTED",
-              rewardKobo: 0,
+              rewardKobo: "0",
             };
           }
+
+          /*
+           * APPROVE
+           *
+           * Lock the user's wallet so two
+           * simultaneous admin approvals
+           * cannot pay twice.
+           */
 
           const walletRows =
             await tx.$queryRaw`
@@ -279,8 +278,7 @@ export async function PATCH(request) {
           let lifetimeEarned = 0n;
 
           if (walletRows.length) {
-            walletId =
-              walletRows[0].id;
+            walletId = walletRows[0].id;
 
             currentBalance =
               BigInt(
@@ -311,14 +309,19 @@ export async function PATCH(request) {
                 RETURNING id
               `;
 
-            walletId =
-              created[0].id;
+            walletId = created[0].id;
           }
 
           const rewardKobo =
             BigInt(
               submission.reward_kobo
             );
+
+          if (rewardKobo <= 0n) {
+            throw new Error(
+              "INVALID_REWARD"
+            );
+          }
 
           const newBalance =
             currentBalance +
@@ -329,7 +332,7 @@ export async function PATCH(request) {
             rewardKobo;
 
           await tx.$executeRaw`
-            UPDATE pitn_wallets
+            UPDATE pitnex_wallets
             SET
               balance_kobo =
                 ${newBalance},
@@ -340,43 +343,63 @@ export async function PATCH(request) {
               ${walletId}::uuid
           `;
 
+          /*
+           * The submission ID itself becomes
+           * the unique reward reference.
+           */
           const reference =
             `TASK-${submission.id}`;
 
-          await tx.$executeRaw`
-            INSERT INTO pitnex_wallet_transactions (
-              user_id,
-              wallet_id,
-              type,
-              status,
-              amount_kobo,
-              reference,
-              description,
-              metadata
-            )
-            VALUES (
-              ${submission.user_id}::uuid,
-              ${walletId}::uuid,
-              'TASK_REWARD',
-              'COMPLETED',
-              ${rewardKobo},
-              ${reference},
-              ${`Task reward: ${submission.title}`},
-              ${JSON.stringify({
-                taskId:
-                  submission.task_id,
-                submissionId:
-                  submission.id,
-              })}::jsonb
-            )
-          `;
+          const transactionRows =
+            await tx.$queryRaw`
+              INSERT INTO pitnex_wallet_transactions (
+                user_id,
+                wallet_id,
+                type,
+                status,
+                amount_kobo,
+                reference,
+                description,
+                metadata
+              )
+              VALUES (
+                ${submission.user_id}::uuid,
+                ${walletId}::uuid,
+                'TASK_REWARD',
+                'COMPLETED',
+                ${rewardKobo},
+                ${reference},
+                ${`Task reward: ${submission.title}`},
+                ${JSON.stringify({
+                  taskId:
+                    submission.task_id,
+                  submissionId:
+                    submission.id,
+                })}::jsonb
+              )
+              RETURNING id
+            `;
 
+          const transactionId =
+            transactionRows[0].id;
+
+          /*
+           * Mark the task completed and save
+           * the exact wallet transaction.
+           *
+           * There is NO completed_at because
+           * that column does not exist.
+           */
           await tx.$executeRaw`
             UPDATE pitnex_user_tasks
             SET
               status = 'COMPLETED',
               reviewed_at = NOW(),
-              completed_at = NOW()
+              reviewed_by =
+                ${DEVELOPMENT_USER_ID}::uuid,
+              reward_transaction_id =
+                ${transactionId}::uuid,
+              updated_at = NOW()
             WHERE id =
               ${submissionId}::uuid
               AND status = 'PENDING'
@@ -386,6 +409,7 @@ export async function PATCH(request) {
             action: "APPROVED",
             rewardKobo:
               rewardKobo.toString(),
+            transactionId,
           };
         }
       );
@@ -393,8 +417,7 @@ export async function PATCH(request) {
     return NextResponse.json({
       success: true,
       message:
-        result.action ===
-        "APPROVED"
+        result.action === "APPROVED"
           ? "Submission approved and wallet credited."
           : "Submission rejected.",
       ...result,
@@ -430,6 +453,20 @@ export async function PATCH(request) {
             "This submission has already been reviewed.",
         },
         { status: 409 }
+      );
+    }
+
+    if (
+      error.message ===
+      "INVALID_REWARD"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid task reward.",
+        },
+        { status: 400 }
       );
     }
 
