@@ -6,6 +6,9 @@ const PAYSTACK_SECRET_KEY =
 const DEVELOPMENT_USER_ID =
   process.env.DEVELOPMENT_USER_ID;
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL;
+
 const UPGRADE_AMOUNT_KOBO = 170000;
 
 export async function POST(request) {
@@ -32,10 +35,23 @@ export async function POST(request) {
       );
     }
 
+    if (!SITE_URL) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "NEXT_PUBLIC_SITE_URL is not configured.",
+        },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     const email =
-      body.email?.trim();
+      typeof body.email === "string"
+        ? body.email.trim()
+        : "";
 
     if (!email) {
       return NextResponse.json(
@@ -46,6 +62,10 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const callbackUrl =
+      `${SITE_URL.replace(/\/$/, "")}` +
+      "/payment/upgrade/callback";
 
     const response = await fetch(
       "https://api.paystack.co/transaction/initialize",
@@ -60,6 +80,8 @@ export async function POST(request) {
         body: JSON.stringify({
           email,
           amount: UPGRADE_AMOUNT_KOBO,
+          currency: "NGN",
+          callback_url: callbackUrl,
           metadata: {
             pitnexUserId:
               DEVELOPMENT_USER_ID,
@@ -67,6 +89,7 @@ export async function POST(request) {
               "PITNEX_ACCOUNT_UPGRADE",
           },
         }),
+        cache: "no-store",
       }
     );
 
@@ -75,7 +98,8 @@ export async function POST(request) {
 
     if (
       !response.ok ||
-      !data.status
+      !data.status ||
+      !data.data
     ) {
       console.error(
         "Paystack initialization error:",
@@ -99,8 +123,11 @@ export async function POST(request) {
         data.data.authorization_url,
       reference:
         data.data.reference,
+      accessCode:
+        data.data.access_code,
       amount:
         UPGRADE_AMOUNT_KOBO,
+      callbackUrl,
     });
   } catch (error) {
     console.error(
