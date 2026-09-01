@@ -76,24 +76,20 @@ enum AccountStatus {
 // ============================================================
 
 model PitnexWallet {
-  id             String   @id @default(uuid()) @db.Uuid
+  id                    String   @id @default(uuid()) @db.Uuid
 
-  userId         String   @unique @db.Uuid
+  userId                String   @unique @db.Uuid
 
-  balanceKobo    BigInt   @default(0)
-  lifetimeEarnedKobo BigInt @default(0)
-  lifetimeWithdrawnKobo BigInt @default(0)
+  balanceKobo           BigInt   @default(0)
+  lifetimeEarnedKobo    BigInt   @default(0)
+  lifetimeWithdrawnKobo BigInt   @default(0)
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  user           PitnexProfile @relation(
-    fields: [userId],
-    references: [id],
-    onDelete: Cascade
-  )
+  user                  PitnexProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  transactions   PitnexWalletTransaction[]
+  transactions          PitnexWalletTransaction[]
 
   @@map("pitnex_wallets")
 }
@@ -122,17 +118,9 @@ model PitnexWalletTransaction {
 
   createdAt      DateTime @default(now())
 
-  user           PitnexProfile @relation(
-    fields: [userId],
-    references: [id],
-    onDelete: Cascade
-  )
+  user           PitnexProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  wallet         PitnexWallet @relation(
-    fields: [walletId],
-    references: [id],
-    onDelete: Cascade
-  )
+  wallet         PitnexWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([walletId])
@@ -187,31 +175,27 @@ enum WalletTransactionStatus {
 // ============================================================
 
 model PitnexWithdrawal {
-  id                 String   @id @default(uuid()) @db.Uuid
+  id            String    @id @default(uuid()) @db.Uuid
 
-  userId             String   @db.Uuid
+  userId        String    @db.Uuid
 
-  reference          String   @unique
+  reference     String    @unique
 
-  amountKobo         BigInt
+  amountKobo    BigInt
 
-  status             WithdrawalStatus @default(PENDING)
+  status        WithdrawalStatus @default(PENDING)
 
-  bankName           String
-  accountNumber      String
-  accountName        String?
-  bankCode            String?
+  bankName      String
+  accountNumber String
+  accountName   String?
+  bankCode      String?
 
-  requestedAt        DateTime @default(now())
-  processedAt        DateTime?
+  requestedAt   DateTime  @default(now())
+  processedAt   DateTime?
 
-  adminNote           String?
+  adminNote     String?
 
-  user                PitnexProfile @relation(
-    fields: [userId],
-    references: [id],
-    onDelete: Cascade
-  )
+  user          PitnexProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
