@@ -8,17 +8,16 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-/*
-  ============================================================
-  PITNEX DATABASE
-  ============================================================
-
-  IMPORTANT:
-  All PITNEX tables use the "pitnex_" prefix.
-
-  This keeps the PITNEX data clearly separated from the
-  existing THE INDEX tables in the same Supabase project.
-*/
+// ============================================================
+// PITNEX DATABASE
+// ============================================================
+//
+// IMPORTANT:
+// All PITNEX tables use the "pitnex_" prefix.
+//
+// This keeps the PITNEX data clearly separated from the
+// existing THE INDEX tables in the same Supabase project.
+// ============================================================
 
 
 // ============================================================
