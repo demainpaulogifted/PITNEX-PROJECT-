@@ -41,7 +41,8 @@ export async function POST(request) {
     const extension =
       file.name.split(".").pop() || "jpg";
 
-    const filename = `pitnex/proofs/${crypto.randomUUID()}.${extension}`;
+    const filename =
+      `pitnex/proofs/${crypto.randomUUID()}.${extension}`;
 
     const blob = await put(
       filename,
@@ -64,8 +65,7 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Unable to upload screenshot.",
+        error: "Unable to upload screenshot.",
       },
       { status: 500 }
     );
