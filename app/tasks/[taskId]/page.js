@@ -45,13 +45,14 @@ export default function TaskDetailPage() {
         }
       );
 
+      const data = await response.json();
+
       if (!response.ok) {
         throw new Error(
-          "Unable to load this task."
+          data.error ||
+            "Unable to load this task."
         );
       }
-
-      const data = await response.json();
 
       if (!data.task) {
         throw new Error(
@@ -118,26 +119,23 @@ export default function TaskDetailPage() {
       setError("");
       setStatus("");
 
-      /*
-       * The current backend accepts proofImageUrl.
-       *
-       * We intentionally do not use Vercel Blob here.
-       * The upload-storage integration will be wired
-       * separately so the task system can remain build-safe.
-       */
+      const formData = new FormData();
+
+      formData.append(
+        "taskId",
+        taskId
+      );
+
+      formData.append(
+        "proof",
+        proofFile
+      );
 
       const response = await fetch(
         "/api/tasks/submit",
         {
           method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            taskId,
-            proofImageUrl: null,
-          }),
+          body: formData,
         }
       );
 
@@ -167,7 +165,7 @@ export default function TaskDetailPage() {
     } catch (err) {
       setError(
         err.message ||
-          "Unable to submit proof."
+          "Unable to submit task proof."
       );
     } finally {
       setSubmitting(false);
@@ -191,7 +189,9 @@ export default function TaskDetailPage() {
       <main className="tasks-page">
         <div className="container">
           <div className="task-card">
-            <h1>Task unavailable</h1>
+            <h1>
+              Task unavailable
+            </h1>
 
             <p>{error}</p>
 
@@ -209,7 +209,9 @@ export default function TaskDetailPage() {
     );
   }
 
-  if (!task) return null;
+  if (!task) {
+    return null;
+  }
 
   const reward =
     Number(task.reward_kobo) / 100 ||
@@ -345,10 +347,8 @@ export default function TaskDetailPage() {
               }}
             >
               <li>
-                You will earn ₦
-                {reward.toLocaleString()}
-                after successful admin
-                approval.
+                Your reward is ₦
+                {reward.toLocaleString()}.
               </li>
 
               <li>
@@ -357,8 +357,8 @@ export default function TaskDetailPage() {
               </li>
 
               <li>
-                Read the article and
-                complete the required action.
+                Read the article and complete
+                the required action.
               </li>
 
               <li>
@@ -367,8 +367,8 @@ export default function TaskDetailPage() {
               </li>
 
               <li>
-                Select the screenshot below
-                and submit it.
+                Select your screenshot and
+                submit it for review.
               </li>
             </ol>
           </div>
@@ -457,7 +457,7 @@ export default function TaskDetailPage() {
               <input
                 id="proof"
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp"
                 capture="environment"
                 onChange={
                   handleFileChange
@@ -480,8 +480,7 @@ export default function TaskDetailPage() {
                     fontWeight: 700,
                   }}
                 >
-                  Selected:
-                  {" "}
+                  Selected:{" "}
                   {proofFile.name}
                 </p>
 
@@ -570,9 +569,9 @@ export default function TaskDetailPage() {
               }}
             >
               {submitting
-                ? "Submitting..."
+                ? "Uploading proof..."
                 : status
-                ? "Proof Pending Review"
+                ? "⏳ Proof Pending Review"
                 : `Submit Proof & Earn ₦${reward.toLocaleString()}`}
             </button>
           </div>
