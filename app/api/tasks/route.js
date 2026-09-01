@@ -1,76 +1,132 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const ADMIN_EMAIL = "paulotubo9@gmail.com";
+const DEVELOPMENT_USER_ID =
+  process.env.DEVELOPMENT_USER_ID;
 
-export async function POST(request) {
+const MAX_DAILY_TASKS = 6;
+
+export async function GET() {
   try {
-    const body = await request.json();
-
-    /*
-     * Temporary admin identity bridge.
-     *
-     * The production authentication layer will replace
-     * this email check with the authenticated server session.
-     */
-    const email =
-      typeof body.email === "string"
-        ? body.email.trim().toLowerCase()
-        : ADMIN_EMAIL;
-
-    if (email !== ADMIN_EMAIL) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Administrator access required.",
-        },
-        { status: 403 }
-      );
-    }
-
-    const title =
-      typeof body.title === "string"
-        ? body.title.trim()
-        : "";
-
-    const instructions =
-      typeof body.instructions === "string"
-        ? body.instructions.trim()
-        : "";
-
-    const type =
-      body.type === "CUSTOM"
-        ? "CUSTOM"
-        : "ARTICLE";
-
-    const articleUrl =
-      typeof body.articleUrl === "string" &&
-      body.articleUrl.trim()
-        ? body.articleUrl.trim()
-        : null;
-
-    const rewardNaira =
-      Number(body.rewardNaira);
-
-    const active =
-      body.active !== false;
-
-    if (!title) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Task title is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!instructions) {
+    if (!DEVELOPMENT_USER_ID) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Task instructions are required.",
+            "PITNEX user authentication is not configured yet.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const tasks = await prisma.$queryRaw`
+      SELECT
+        t.id,
+        t.title,
+        t.type,
+        t.instructions,
+        t.article_url,
+        t.reward_kobo,
+        t.max_completions,
+        t.starts_at,
+        t.ends_at,
+        t.is_active,
+        COALESCE(ut.status, 'AVAILABLE') AS status
+      FROM pitnex_tasks t
+      LEFT JOIN pitnex_user_tasks ut
+        ON ut.task_id = t.id
+        AND ut.user_id = ${DEVELOPMENT_USER_ID}::uuid
+      WHERE t.is_active = true
+        AND (
+          t.starts_at IS NULL
+          OR t.starts_at <= NOW()
+        )
+        AND (
+          t.ends_at IS NULL
+          OR t.ends_at >= NOW()
+        )
+      ORDER BY t.created_at DESC
+    `;
+
+    const dailyCount = await prisma.$queryRaw`
+      SELECT COUNT(*)::int AS count
+      FROM pitnex_user_tasks
+      WHERE user_id = ${DEVELOPMENT_USER_ID}::uuid
+        AND assigned_date = CURRENT_DATE
+        AND status IN (
+          'PENDING',
+          'COMPLETED'
+        )
+    `;
+
+    const completedToday =
+      Number(dailyCount[0]?.count || 0);
+
+    const availableTasks = tasks
+      .filter(
+        (task) =>
+          task.status === "AVAILABLE"
+      )
+      .slice(
+        0,
+        Math.max(
+          0,
+          MAX_DAILY_TASKS -
+            completedToday
+        )
+      );
+
+    return NextResponse.json({
+      success: true,
+      tasks: availableTasks,
+      dailyLimit: MAX_DAILY_TASKS,
+      completedToday,
+      remainingToday: Math.max(
+        0,
+        MAX_DAILY_TASKS -
+          completedToday
+      ),
+    });
+  } catch (error) {
+    console.error(
+      "PITNEX tasks GET error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Unable to load available tasks.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request) {
+  try {
+    const body =
+      await request.json();
+
+    const {
+      type = "ARTICLE",
+      title,
+      instructions,
+      articleUrl,
+      rewardNaira = 180,
+      maxCompletions,
+      startsAt,
+      endsAt,
+      active = true,
+    } = body;
+
+    if (!title?.trim()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Task title is required.",
         },
         { status: 400 }
       );
@@ -78,94 +134,117 @@ export async function POST(request) {
 
     if (
       type === "ARTICLE" &&
-      !articleUrl
+      !articleUrl?.trim()
     ) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Article URL is required for an article task.",
+            "Article URL is required for article tasks.",
         },
         { status: 400 }
       );
     }
+
+    const rewardKobo =
+      Math.round(
+        Number(rewardNaira) * 100
+      );
 
     if (
-      !Number.isFinite(rewardNaira) ||
-      rewardNaira <= 0
+      !Number.isFinite(
+        rewardKobo
+      ) ||
+      rewardKobo <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Reward must be greater than zero.",
+            "Invalid task reward.",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * PITNEX stores money in kobo.
-     *
-     * ₦180 = 18,000 kobo
-     */
-    const rewardKobo = BigInt(
-      Math.round(rewardNaira * 100)
-    );
+    const max =
+      maxCompletions === "" ||
+      maxCompletions == null
+        ? null
+        : Number(maxCompletions);
 
-    /*
-     * Store the task instructions together with
-     * the task title in the existing task structure.
-     *
-     * We intentionally use the existing pitnex_tasks
-     * table instead of assuming a Prisma PitnexTask model.
-     */
-    const taskTitle = instructions
-      ? `${title}\n\n${instructions}`
-      : title;
+    if (
+      max !== null &&
+      (!Number.isInteger(max) ||
+        max < 1)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Maximum completions must be a positive whole number.",
+        },
+        { status: 400 }
+      );
+    }
 
-    const result = await prisma.$queryRaw`
+    const tasks = await prisma.$queryRaw`
       INSERT INTO pitnex_tasks (
+        type,
         title,
+        instructions,
         article_url,
         reward_kobo,
+        max_completions,
+        starts_at,
+        ends_at,
         is_active
       )
       VALUES (
-        ${taskTitle},
-        ${articleUrl},
+        ${type},
+        ${title.trim()},
+        ${instructions?.trim() || null},
+        ${articleUrl?.trim() || null},
         ${rewardKobo},
-        ${active}
+        ${max},
+        ${
+          startsAt
+            ? new Date(startsAt)
+            : null
+        },
+        ${
+          endsAt
+            ? new Date(endsAt)
+            : null
+        },
+        ${Boolean(active)}
       )
       RETURNING
         id,
+        type,
         title,
+        instructions,
         article_url,
         reward_kobo,
-        is_active
+        max_completions,
+        starts_at,
+        ends_at,
+        is_active,
+        created_at
     `;
-
-    const task = result[0];
 
     return NextResponse.json(
       {
         success: true,
-        message: "Task created successfully.",
-        task: {
-          id: task.id,
-          title: task.title,
-          type,
-          articleUrl: task.article_url,
-          rewardNaira:
-            Number(task.reward_kobo) / 100,
-          active: task.is_active,
-        },
+        message:
+          "Task created successfully.",
+        task: tasks[0],
       },
       { status: 201 }
     );
   } catch (error) {
     console.error(
-      "PITNEX admin task creation error:",
+      "PITNEX task creation error:",
       error
     );
 
