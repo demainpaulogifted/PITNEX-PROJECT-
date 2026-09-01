@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
@@ -8,7 +8,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-export default function UpgradeCallbackPage() {
+function UpgradeCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -18,14 +18,11 @@ export default function UpgradeCallbackPage() {
   );
 
   useEffect(() => {
-    const reference =
-      searchParams.get("reference");
+    const reference = searchParams.get("reference");
 
     if (!reference) {
       setStatus("error");
-      setMessage(
-        "No payment reference was found."
-      );
+      setMessage("No payment reference was found.");
       return;
     }
 
@@ -59,6 +56,7 @@ export default function UpgradeCallbackPage() {
         }
 
         setStatus("success");
+
         setMessage(
           data.alreadyProcessed
             ? "Your account is already upgraded."
@@ -73,6 +71,7 @@ export default function UpgradeCallbackPage() {
         if (cancelled) return;
 
         setStatus("error");
+
         setMessage(
           error.message ||
             "We could not verify your payment."
@@ -87,157 +86,161 @@ export default function UpgradeCallbackPage() {
     };
   }, [router, searchParams]);
 
-  return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        background: "#f7f7f7",
-      }}
-    >
-      <section
-        style={{
-          width: "100%",
-          maxWidth: "440px",
-          background: "#fff",
-          border: "1px solid #e5e5e5",
-          borderRadius: "22px",
-          padding: "32px 24px",
-          textAlign: "center",
-          boxShadow:
-            "0 15px 45px rgba(0,0,0,0.08)",
-        }}
-      >
-        {status === "verifying" && (
-          <>
-            <Loader2
-              size={52}
-              style={{
-                animation:
-                  "pitnex-callback-spin 1s linear infinite",
-                marginBottom: "18px",
-              }}
-            />
+  if (status === "verifying") {
+    return (
+      <section className="callback-card">
+        <Loader2
+          size={52}
+          className="callback-spinner"
+        />
 
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "25px",
-              }}
-            >
-              Verifying payment
-            </h1>
+        <h1>Verifying payment</h1>
 
-            <p
-              style={{
-                marginTop: "12px",
-                opacity: 0.65,
-                lineHeight: 1.6,
-              }}
-            >
-              Please wait while we securely
-              confirm your ₦1,700 upgrade
-              payment.
-            </p>
-          </>
-        )}
-
-        {status === "success" && (
-          <>
-            <CheckCircle2
-              size={58}
-              style={{
-                marginBottom: "18px",
-              }}
-            />
-
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "25px",
-              }}
-            >
-              Account upgraded 🎉
-            </h1>
-
-            <p
-              style={{
-                marginTop: "12px",
-                opacity: 0.7,
-                lineHeight: 1.6,
-              }}
-            >
-              {message}
-            </p>
-
-            <p
-              style={{
-                marginTop: "18px",
-                fontSize: "13px",
-                opacity: 0.55,
-              }}
-            >
-              Redirecting you to your dashboard...
-            </p>
-          </>
-        )}
-
-        {status === "error" && (
-          <>
-            <XCircle
-              size={58}
-              style={{
-                marginBottom: "18px",
-              }}
-            />
-
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "25px",
-              }}
-            >
-              Payment verification failed
-            </h1>
-
-            <p
-              style={{
-                marginTop: "12px",
-                opacity: 0.7,
-                lineHeight: 1.6,
-              }}
-            >
-              {message}
-            </p>
-
-            <button
-              type="button"
-              onClick={() =>
-                router.replace("/dashboard")
-              }
-              style={{
-                width: "100%",
-                marginTop: "22px",
-                padding: "14px",
-                border: 0,
-                borderRadius: "12px",
-                background: "#111",
-                color: "#fff",
-                fontSize: "15px",
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              Return to Dashboard
-            </button>
-          </>
-        )}
+        <p>
+          Please wait while we securely confirm
+          your ₦1,700 upgrade payment.
+        </p>
       </section>
+    );
+  }
+
+  if (status === "success") {
+    return (
+      <section className="callback-card">
+        <CheckCircle2
+          size={58}
+          className="success-icon"
+        />
+
+        <h1>Account upgraded 🎉</h1>
+
+        <p>{message}</p>
+
+        <small>
+          Redirecting you to your dashboard...
+        </small>
+      </section>
+    );
+  }
+
+  return (
+    <section className="callback-card">
+      <XCircle
+        size={58}
+        className="error-icon"
+      />
+
+      <h1>Payment verification failed</h1>
+
+      <p>{message}</p>
+
+      <button
+        type="button"
+        onClick={() =>
+          router.replace("/dashboard")
+        }
+      >
+        Return to Dashboard
+      </button>
+    </section>
+  );
+}
+
+export default function UpgradeCallbackPage() {
+  return (
+    <>
+      <main className="callback-page">
+        <Suspense
+          fallback={
+            <section className="callback-card">
+              <Loader2
+                size={52}
+                className="callback-spinner"
+              />
+
+              <h1>
+                Loading payment verification...
+              </h1>
+
+              <p>
+                Please wait...
+              </p>
+            </section>
+          }
+        >
+          <UpgradeCallbackContent />
+        </Suspense>
+      </main>
 
       <style jsx global>{`
+        .callback-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background: #f7f7f7;
+          box-sizing: border-box;
+        }
+
+        .callback-card {
+          width: 100%;
+          max-width: 440px;
+          background: #fff;
+          border: 1px solid #e5e5e5;
+          border-radius: 22px;
+          padding: 32px 24px;
+          text-align: center;
+          box-shadow:
+            0 15px 45px rgba(0, 0, 0, 0.08);
+          box-sizing: border-box;
+        }
+
+        .callback-card h1 {
+          margin: 12px 0 0;
+          font-size: 25px;
+        }
+
+        .callback-card p {
+          margin-top: 12px;
+          opacity: 0.7;
+          line-height: 1.6;
+        }
+
+        .callback-card small {
+          display: block;
+          margin-top: 18px;
+          font-size: 13px;
+          opacity: 0.55;
+        }
+
+        .callback-spinner {
+          animation:
+            pitnex-callback-spin
+            1s linear infinite;
+        }
+
+        .success-icon {
+          margin-bottom: 4px;
+        }
+
+        .error-icon {
+          margin-bottom: 4px;
+        }
+
+        .callback-card button {
+          width: 100%;
+          margin-top: 22px;
+          padding: 14px;
+          border: 0;
+          border-radius: 12px;
+          background: #111;
+          color: #fff;
+          font-size: 15px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
         @keyframes pitnex-callback-spin {
           from {
             transform: rotate(0deg);
@@ -248,6 +251,6 @@ export default function UpgradeCallbackPage() {
           }
         }
       `}</style>
-    </main>
+    </>
   );
 }
