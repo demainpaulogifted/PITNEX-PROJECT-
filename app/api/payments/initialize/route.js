@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const PAYSTACK_SECRET_KEY =
   process.env.PAYSTACK_SECRET_KEY;
-
-const DEVELOPMENT_USER_ID =
-  process.env.DEVELOPMENT_USER_ID;
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL;
 
 const UPGRADE_AMOUNT_KOBO = 170000;
 
-export async function POST(request) {
+export async function POST() {
   try {
     if (!PAYSTACK_SECRET_KEY) {
       return NextResponse.json(
@@ -21,17 +19,6 @@ export async function POST(request) {
             "PAYSTACK_SECRET_KEY is not configured.",
         },
         { status: 500 }
-      );
-    }
-
-    if (!DEVELOPMENT_USER_ID) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "PITNEX user authentication is not configured yet.",
-        },
-        { status: 503 }
       );
     }
 
@@ -46,18 +33,31 @@ export async function POST(request) {
       );
     }
 
-    const body = await request.json();
+    const supabase =
+      await createSupabaseServerClient();
 
-    const email =
-      typeof body.email === "string"
-        ? body.email.trim()
-        : "";
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!email) {
+    if (authError || !user) {
       return NextResponse.json(
         {
           success: false,
-          error: "Email is required.",
+          error:
+            "You must be logged in to upgrade your account.",
+        },
+        { status: 401 }
+      );
+    }
+
+    if (!user.email) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Your account does not have a valid email address.",
         },
         { status: 400 }
       );
@@ -78,13 +78,12 @@ export async function POST(request) {
             "application/json",
         },
         body: JSON.stringify({
-          email,
+          email: user.email,
           amount: UPGRADE_AMOUNT_KOBO,
           currency: "NGN",
           callback_url: callbackUrl,
           metadata: {
-            pitnexUserId:
-              DEVELOPMENT_USER_ID,
+            pitnexUserId: user.id,
             purpose:
               "PITNEX_ACCOUNT_UPGRADE",
           },
