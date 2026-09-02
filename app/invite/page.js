@@ -7,9 +7,11 @@ const SITE_URL =
   "https://pitnex.name.ng";
 
 export default function InvitePage() {
+  const [inviteLink, setInviteLink] = useState("");
   const [referralCode, setReferralCode] = useState("");
   const [referrals, setReferrals] = useState(0);
   const [rewarded, setRewarded] = useState(0);
+  const [totalEarned, setTotalEarned] = useState(0);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
@@ -23,12 +25,9 @@ export default function InvitePage() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        "/api/referrals",
-        {
-          cache: "no-store",
-        }
-      );
+      const response = await fetch("/api/referrals", {
+        cache: "no-store",
+      });
 
       const data = await response.json();
 
@@ -39,18 +38,23 @@ export default function InvitePage() {
         );
       }
 
+      const code = data.referralCode || "";
+
+      setReferralCode(code);
       setReferrals(data.referralCount || 0);
       setRewarded(data.rewardedCount || 0);
+      setTotalEarned(data.totalEarnedNaira || 0);
 
-      /*
-       * Until we add the permanent referral-code
-       * field, use the authenticated user's ID as
-       * the unique invite identifier.
-       */
-      setReferralCode(data.referralCode || "");
+      if (code) {
+        setInviteLink(
+          `${SITE_URL}/signup?ref=${encodeURIComponent(code)}`
+        );
+      }
     } catch (err) {
+      console.error("Referral page error:", err);
+
       setError(
-        err.message ||
+        err?.message ||
           "Unable to load referral information."
       );
     } finally {
@@ -58,19 +62,11 @@ export default function InvitePage() {
     }
   }
 
-  const inviteLink = referralCode
-    ? `${SITE_URL}/signup?ref=${encodeURIComponent(
-        referralCode
-      )}`
-    : "";
-
   async function copyInviteLink() {
     if (!inviteLink) return;
 
     try {
-      await navigator.clipboard.writeText(
-        inviteLink
-      );
+      await navigator.clipboard.writeText(inviteLink);
 
       setCopied(true);
 
@@ -78,9 +74,7 @@ export default function InvitePage() {
         setCopied(false);
       }, 2000);
     } catch {
-      setError(
-        "Unable to copy the invite link."
-      );
+      setError("Unable to copy the invite link.");
     }
   }
 
@@ -90,7 +84,7 @@ export default function InvitePage() {
     const shareData = {
       title: "Join PITNEX",
       text:
-        "Join PITNEX and earn by completing available tasks.",
+        "Join PITNEX and start earning from available tasks.",
       url: inviteLink,
     };
 
@@ -123,11 +117,7 @@ export default function InvitePage() {
           margin: "0 auto",
         }}
       >
-        <div
-          style={{
-            marginBottom: "24px",
-          }}
-        >
+        <div style={{ marginBottom: "24px" }}>
           <a
             href="/dashboard"
             style={{
@@ -158,12 +148,27 @@ export default function InvitePage() {
               lineHeight: 1.6,
             }}
           >
-            Invite people to PITNEX and earn
-            ₦500 for each qualifying referral.
+            Invite people to PITNEX and earn ₦500
+            for each qualifying referral.
           </p>
         </div>
 
-        {/* REWARD CARD */}
+        {error && (
+          <div
+            style={{
+              marginBottom: "18px",
+              padding: "14px 16px",
+              borderRadius: "12px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              color: "#b91c1c",
+              fontSize: "14px",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         <section
           style={{
             background: "#111827",
@@ -194,8 +199,7 @@ export default function InvitePage() {
 
           <p
             style={{
-              margin:
-                "8px 0 0",
+              margin: "8px 0 0",
               color: "#d1d5db",
               lineHeight: 1.5,
               fontSize: "14px",
@@ -206,28 +210,10 @@ export default function InvitePage() {
           </p>
         </section>
 
-        {error && (
-          <div
-            style={{
-              marginBottom: "18px",
-              padding: "14px 16px",
-              borderRadius: "12px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              color: "#b91c1c",
-              fontSize: "14px",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* INVITE LINK */}
         <section
           style={{
             background: "#fff",
-            border:
-              "1px solid #e4e7ec",
+            border: "1px solid #e4e7ec",
             borderRadius: "20px",
             padding: "24px",
             marginBottom: "18px",
@@ -249,177 +235,99 @@ export default function InvitePage() {
               margin: "0 0 16px",
               color: "#667085",
               fontSize: "14px",
-              lineHeight: 1.5,
             }}
           >
-            Share your personal link with friends
-            and invite them to PITNEX.
+            Share this link with friends.
           </p>
+
+          <input
+            value={loading ? "Loading..." : inviteLink}
+            readOnly
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "13px 14px",
+              border: "1px solid #d0d5dd",
+              borderRadius: "10px",
+              background: "#f9fafb",
+              color: "#344054",
+              fontSize: "14px",
+            }}
+          />
+
+          {referralCode && (
+            <div
+              style={{
+                marginTop: "10px",
+                fontSize: "13px",
+                color: "#667085",
+              }}
+            >
+              Referral code:{" "}
+              <strong>{referralCode}</strong>
+            </div>
+          )}
 
           <div
             style={{
-              display: "flex",
-              gap: "8px",
-              flexDirection:
-                "column",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "10px",
+              marginTop: "12px",
             }}
           >
-            <input
-              value={
-                loading
-                  ? "Loading..."
-                  : inviteLink
-              }
-              readOnly
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "13px 14px",
-                border:
-                  "1px solid #d0d5dd",
-                borderRadius: "10px",
-                background: "#f9fafb",
-                color: "#344054",
-                fontSize: "14px",
-              }}
-            />
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "1fr 1fr",
-                gap: "10px",
-              }}
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              disabled={!inviteLink}
+              style={buttonDark}
             >
-              <button
-                type="button"
-                onClick={copyInviteLink}
-                disabled={!inviteLink}
-                style={{
-                  padding: "13px",
-                  border: "none",
-                  borderRadius: "10px",
-                  background:
-                    "#111827",
-                  color: "#fff",
-                  fontWeight: 800,
-                  cursor:
-                    inviteLink
-                      ? "pointer"
-                      : "not-allowed",
-                }}
-              >
-                {copied
-                  ? "Copied!"
-                  : "Copy Link"}
-              </button>
+              {copied ? "Copied!" : "Copy Link"}
+            </button>
 
-              <button
-                type="button"
-                onClick={shareInvite}
-                disabled={!inviteLink}
-                style={{
-                  padding: "13px",
-                  border:
-                    "1px solid #d0d5dd",
-                  borderRadius: "10px",
-                  background: "#fff",
-                  color: "#111827",
-                  fontWeight: 800,
-                  cursor:
-                    inviteLink
-                      ? "pointer"
-                      : "not-allowed",
-                }}
-              >
-                Share
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={shareInvite}
+              disabled={!inviteLink}
+              style={buttonLight}
+            >
+              Share
+            </button>
           </div>
         </section>
 
-        {/* STATS */}
         <section
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "1fr 1fr",
+            gridTemplateColumns: "1fr 1fr",
             gap: "14px",
             marginBottom: "18px",
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              border:
-                "1px solid #e4e7ec",
-              borderRadius: "18px",
-              padding: "20px",
-            }}
-          >
-            <div
-              style={{
-                color: "#667085",
-                fontSize: "13px",
-              }}
-            >
-              People invited
-            </div>
+          <Stat
+            title="People invited"
+            value={loading ? "..." : referrals}
+          />
 
-            <div
-              style={{
-                marginTop: "6px",
-                fontSize: "28px",
-                fontWeight: 900,
-                color: "#101828",
-              }}
-            >
-              {loading
+          <Stat
+            title="Qualified"
+            value={loading ? "..." : rewarded}
+          />
+
+          <Stat
+            title="Referral earnings"
+            value={
+              loading
                 ? "..."
-                : referrals}
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: "#fff",
-              border:
-                "1px solid #e4e7ec",
-              borderRadius: "18px",
-              padding: "20px",
-            }}
-          >
-            <div
-              style={{
-                color: "#667085",
-                fontSize: "13px",
-              }}
-            >
-              Qualified referrals
-            </div>
-
-            <div
-              style={{
-                marginTop: "6px",
-                fontSize: "28px",
-                fontWeight: 900,
-                color: "#101828",
-              }}
-            >
-              {loading
-                ? "..."
-                : rewarded}
-            </div>
-          </div>
+                : `₦${Number(totalEarned).toLocaleString()}`
+            }
+          />
         </section>
 
-        {/* HOW IT WORKS */}
         <section
           style={{
             background: "#fff",
-            border:
-              "1px solid #e4e7ec",
+            border: "1px solid #e4e7ec",
             borderRadius: "20px",
             padding: "24px",
           }}
@@ -435,53 +343,75 @@ export default function InvitePage() {
             How it works
           </h2>
 
-          <div
-            style={{
-              display: "grid",
-              gap: "16px",
-            }}
-          >
-            <Step
-              number="1"
-              title="Share your link"
-              text="Send your personal PITNEX invite link to someone you know."
-            />
+          <Step
+            number="1"
+            title="Share your link"
+            text="Send your personal PITNEX invite link."
+          />
 
-            <Step
-              number="2"
-              title="They join PITNEX"
-              text="Your invited user creates their account through your referral."
-            />
+          <Step
+            number="2"
+            title="They join"
+            text="Your friend creates a PITNEX account through your link."
+          />
 
-            <Step
-              number="3"
-              title="They qualify"
-              text="The referral must complete PITNEX's required qualification."
-            />
+          <Step
+            number="3"
+            title="They qualify"
+            text="They complete PITNEX's required qualification."
+          />
 
-            <Step
-              number="4"
-              title="You earn ₦500"
-              text="Once the referral qualifies, the ₦500 reward is credited to your wallet."
-            />
-          </div>
+          <Step
+            number="4"
+            title="You earn ₦500"
+            text="The ₦500 referral reward becomes eligible for your wallet."
+          />
         </section>
       </div>
     </main>
   );
 }
 
-function Step({
-  number,
-  title,
-  text,
-}) {
+function Stat({ title, value }) {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #e4e7ec",
+        borderRadius: "18px",
+        padding: "20px",
+      }}
+    >
+      <div
+        style={{
+          color: "#667085",
+          fontSize: "13px",
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          marginTop: "6px",
+          fontSize: "24px",
+          fontWeight: 900,
+          color: "#101828",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Step({ number, title, text }) {
   return (
     <div
       style={{
         display: "flex",
         gap: "14px",
-        alignItems: "flex-start",
+        marginBottom: "16px",
       }}
     >
       <div
@@ -496,7 +426,6 @@ function Step({
           alignItems: "center",
           justifyContent: "center",
           fontWeight: 800,
-          fontSize: "14px",
         }}
       >
         {number}
@@ -526,3 +455,23 @@ function Step({
     </div>
   );
 }
+
+const buttonDark = {
+  padding: "13px",
+  border: "none",
+  borderRadius: "10px",
+  background: "#111827",
+  color: "#fff",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const buttonLight = {
+  padding: "13px",
+  border: "1px solid #d0d5dd",
+  borderRadius: "10px",
+  background: "#fff",
+  color: "#111827",
+  fontWeight: 800,
+  cursor: "pointer",
+};
