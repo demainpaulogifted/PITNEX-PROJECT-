@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 const REFERRAL_REWARD_KOBO = 50000;
 
+function makeReferralCode(userId) {
+  return userId.replace(/-/g, "").slice(0, 10).toUpperCase();
+}
+
 export async function GET() {
   try {
     const supabase = await createSupabaseServerClient();
@@ -52,7 +56,7 @@ export async function GET() {
         rewarded,
         rewarded_at,
         created_at
-      FROM pitnex_referrals
+      FROM public.pitnex_referrals
       WHERE referrer_id = ${user.id}::uuid
       ORDER BY created_at DESC
     `;
@@ -61,20 +65,19 @@ export async function GET() {
       (item) => item.rewarded === true
     ).length;
 
+    const referralCode = makeReferralCode(user.id);
+
     return NextResponse.json({
       success: true,
+      referralCode,
       referralCount: referrals.length,
       rewardedCount,
       totalEarnedNaira:
-        rewardedCount *
-        (REFERRAL_REWARD_KOBO / 100),
+        rewardedCount * (REFERRAL_REWARD_KOBO / 100),
       referrals,
     });
   } catch (error) {
-    console.error(
-      "Referral GET error:",
-      error
-    );
+    console.error("Referral GET error:", error);
 
     return NextResponse.json(
       {
@@ -151,31 +154,25 @@ export async function POST(request) {
       );
     }
 
-    const existing =
-      await prisma.$queryRaw`
-        SELECT
-          id,
-          referrer_id,
-          rewarded
-        FROM pitnex_referrals
-        WHERE referred_user_id =
-          ${referredUserId}::uuid
-        LIMIT 1
-      `;
+    const existing = await prisma.$queryRaw`
+      SELECT id
+      FROM public.pitnex_referrals
+      WHERE referred_user_id = ${referredUserId}::uuid
+      LIMIT 1
+    `;
 
     if (existing.length > 0) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "This user has already been referred.",
+          error: "This user has already been referred.",
         },
         { status: 409 }
       );
     }
 
     await prisma.$executeRaw`
-      INSERT INTO pitnex_referrals (
+      INSERT INTO public.pitnex_referrals (
         id,
         referrer_id,
         referred_user_id,
@@ -195,23 +192,17 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message:
-        "Referral recorded successfully.",
-      rewardNaira:
-        REFERRAL_REWARD_KOBO / 100,
+      message: "Referral recorded successfully.",
+      rewardNaira: REFERRAL_REWARD_KOBO / 100,
       status: "PENDING",
     });
   } catch (error) {
-    console.error(
-      "Referral POST error:",
-      error
-    );
+    console.error("Referral POST error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Unable to record referral.",
+        error: "Unable to record referral.",
       },
       { status: 500 }
     );
