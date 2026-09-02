@@ -37,104 +37,81 @@ export default function SignupPage() {
       const password = form.password;
 
       if (!fullName) {
-        throw new Error("Please enter your full name.");
+        setError("Please enter your full name.");
+        return;
       }
 
       if (!email) {
-        throw new Error("Please enter your email address.");
+        setError("Please enter your email address.");
+        return;
       }
 
       if (password.length < 8) {
-        throw new Error(
-          "Password must be at least 8 characters."
-        );
+        setError("Password must be at least 8 characters.");
+        return;
       }
 
       if (password !== form.confirmPassword) {
-        throw new Error("Passwords do not match.");
+        setError("Passwords do not match.");
+        return;
       }
 
-      const {
-        data,
-        error: signupError,
-      } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
+      const { data, error: signupError } =
+        await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
+            emailRedirectTo:
+              "https://pitnex.name.ng/auth/callback",
           },
-        },
-      });
+        });
 
       if (signupError) {
-        console.error(
-          "Supabase signup error:",
-          signupError
-        );
-
-        throw new Error(signupError.message);
+        console.error("Supabase signup error:", signupError);
+        setError(signupError.message);
+        return;
       }
 
       /*
-       * Supabase may return a user without a session.
-       * Do NOT automatically assume this means email
-       * verification is enabled.
+       * If Supabase returns a session, the account is
+       * immediately authenticated.
        */
-
       if (data?.session) {
         router.replace("/dashboard");
         router.refresh();
         return;
       }
 
+      /*
+       * If there is a user but no session, do not display
+       * the old misleading "Confirm email is enabled"
+       * message.
+       *
+       * Supabase may require confirmation depending on
+       * the project's Auth configuration.
+       */
       if (data?.user) {
-        /*
-         * The account was created successfully.
-         *
-         * If Supabase requires confirmation, the auth
-         * response will normally expose that through the
-         * user's confirmation state.
-         */
-
-        const identities =
-          data.user.identities || [];
+        const identities = data.user.identities || [];
 
         if (identities.length === 0) {
-          throw new Error(
-            "This email may already be registered. Please try logging in."
+          setError(
+            "An account with this email may already exist. Please log in."
           );
-        }
-
-        /*
-         * Try refreshing the session once before showing
-         * an error. This handles cases where the browser
-         * client has not immediately received the session.
-         */
-
-        const {
-          data: sessionData,
-        } = await supabase.auth.getSession();
-
-        if (sessionData?.session) {
-          router.replace("/dashboard");
-          router.refresh();
           return;
         }
 
-        /*
-         * The account exists, but Supabase did not return
-         * an authenticated session.
-         */
         setError(
-          "Your account was created, but PITNEX could not sign you in automatically. Please try logging in."
+          "Account created successfully. Please log in to continue."
         );
 
         return;
       }
 
-      throw new Error(
-        "PITNEX could not create your account."
+      setError(
+        "We could not complete your registration. Please try again."
       );
     } catch (err) {
       console.error("Signup error:", err);
@@ -163,7 +140,7 @@ export default function SignupPage() {
         style={{
           width: "100%",
           maxWidth: "440px",
-          background: "#fff",
+          background: "#ffffff",
           borderRadius: "20px",
           padding: "32px",
           boxShadow:
@@ -233,9 +210,7 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label
-            style={labelStyle}
-          >
+          <label style={labelStyle}>
             Email address
           </label>
 
@@ -250,9 +225,7 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label
-            style={labelStyle}
-          >
+          <label style={labelStyle}>
             Password
           </label>
 
@@ -267,9 +240,7 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label
-            style={labelStyle}
-          >
+          <label style={labelStyle}>
             Confirm password
           </label>
 
@@ -296,7 +267,7 @@ export default function SignupPage() {
               background: loading
                 ? "#9ca3af"
                 : "#111827",
-              color: "#fff",
+              color: "#ffffff",
               fontSize: "16px",
               fontWeight: 700,
               cursor: loading
@@ -352,5 +323,5 @@ const inputStyle = {
   outline: "none",
   fontSize: "15px",
   color: "#111827",
-  background: "#fff",
+  background: "#ffffff",
 };
