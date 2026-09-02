@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { prisma } from "@/lib/prisma";
 
 const PAYSTACK_SECRET_KEY =
   process.env.PAYSTACK_SECRET_KEY;
-
-const DEVELOPMENT_USER_ID =
-  process.env.DEVELOPMENT_USER_ID;
 
 const UPGRADE_AMOUNT_KOBO = 170000;
 
@@ -15,37 +13,59 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "PAYSTACK_SECRET_KEY is not configured.",
+          error:
+            "PAYSTACK_SECRET_KEY is not configured.",
         },
         { status: 500 }
       );
     }
 
-    if (!DEVELOPMENT_USER_ID) {
+    const supabase =
+      await createSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "PITNEX user authentication is not configured yet.",
+            "You must be logged in to verify this payment.",
         },
-        { status: 503 }
+        { status: 401 }
       );
     }
 
-    const body = await request.json();
-    const reference = body.reference?.trim();
-
-    if (!reference) {
+    if (!user.email) {
       return NextResponse.json(
         {
           success: false,
-          error: "Payment reference is required.",
+          error:
+            "Your account does not have a valid email address.",
         },
         { status: 400 }
       );
     }
 
-    // Verify directly with Paystack.
+    const body = await request.json();
+
+    const reference =
+      body.reference?.trim();
+
+    if (!reference) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Payment reference is required.",
+        },
+        { status: 400 }
+      );
+    }
+
     const response = await fetch(
       `https://api.paystack.co/transaction/verify/${encodeURIComponent(
         reference
@@ -53,8 +73,10 @@ export async function POST(request) {
       {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-          "Content-Type": "application/json",
+          Authorization:
+            `Bearer ${PAYSTACK_SECRET_KEY}`,
+          "Content-Type":
+            "application/json",
         },
         cache: "no-store",
       }
@@ -62,7 +84,11 @@ export async function POST(request) {
 
     const data = await response.json();
 
-    if (!response.ok || !data.status || !data.data) {
+    if (
+      !response.ok ||
+      !data.status ||
+      !data.data
+    ) {
       console.error(
         "Paystack verification error:",
         data
@@ -81,21 +107,23 @@ export async function POST(request) {
 
     const payment = data.data;
 
-    // Payment must actually be successful.
     if (payment.status !== "success") {
       return NextResponse.json(
         {
           success: false,
-          error: `Payment has not completed. Current status: ${
-            payment.status || "unknown"
-          }.`,
+          error:
+            `Payment has not completed. Current status: ${
+              payment.status || "unknown"
+            }.`,
         },
         { status: 400 }
       );
     }
 
-    // Upgrade price must be exactly ₦1,700.
-    if (Number(payment.amount) !== UPGRADE_AMOUNT_KOBO) {
+    if (
+      Number(payment.amount) !==
+      UPGRADE_AMOUNT_KOBO
+    ) {
       console.error(
         "Invalid PITNEX upgrade amount:",
         {
@@ -107,14 +135,15 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid upgrade payment amount.",
+          error:
+            "Invalid upgrade payment amount.",
         },
         { status: 400 }
       );
     }
 
-    // Confirm this payment was created for PITNEX upgrade.
-    const metadata = payment.metadata || {};
+    const metadata =
+      payment.metadata || {};
 
     if (
       metadata.purpose !==
@@ -130,10 +159,9 @@ export async function POST(request) {
       );
     }
 
-    // Confirm the payment belongs to this PITNEX account.
     if (
       metadata.pitnexUserId !==
-      DEVELOPMENT_USER_ID
+      user.id
     ) {
       return NextResponse.json(
         {
@@ -145,10 +173,25 @@ export async function POST(request) {
       );
     }
 
+    if (
+      payment.customer?.email &&
+      payment.customer.email.toLowerCase() !==
+        user.email.toLowerCase()
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Payment email verification failed.",
+        },
+        { status: 403 }
+      );
+    }
+
     const profile =
       await prisma.pitnexProfile.findUnique({
         where: {
-          id: DEVELOPMENT_USER_ID,
+          id: user.id,
         },
         include: {
           wallet: true,
@@ -159,7 +202,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "PITNEX account not found.",
+          error:
+            "PITNEX account not found.",
         },
         { status: 404 }
       );
@@ -169,14 +213,13 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "PITNEX wallet not found.",
+          error:
+            "PITNEX wallet not found.",
         },
         { status: 500 }
       );
     }
 
-    // Prevent the same Paystack payment
-    // from upgrading the account twice.
     const existingTransaction =
       await prisma.pitnexWalletTransaction.findUnique(
         {
@@ -210,35 +253,38 @@ export async function POST(request) {
       );
     }
 
-    // Record payment + upgrade account atomically.
     await prisma.$transaction(
       async (tx) => {
-        await tx.pitnexWalletTransaction.create({
-          data: {
-            userId: profile.id,
-            walletId: profile.wallet.id,
-            type: "ACCOUNT_UPGRADE",
-            status: "COMPLETED",
-            amountKobo: BigInt(
-              UPGRADE_AMOUNT_KOBO
-            ),
-            reference,
-            description:
-              "PITNEX account upgrade payment",
-            metadata: {
-              provider: "paystack",
-              paystackReference: reference,
-              paystackTransactionId:
-                payment.id ?? null,
-              channel:
-                payment.channel ?? null,
-              paidAt:
-                payment.paid_at ?? null,
-              currency:
-                payment.currency ?? null,
+        await tx.pitnexWalletTransaction.create(
+          {
+            data: {
+              userId: profile.id,
+              walletId: profile.wallet.id,
+              type: "ACCOUNT_UPGRADE",
+              status: "COMPLETED",
+              amountKobo:
+                BigInt(
+                  UPGRADE_AMOUNT_KOBO
+                ),
+              reference,
+              description:
+                "PITNEX account upgrade payment",
+              metadata: {
+                provider: "paystack",
+                paystackReference:
+                  reference,
+                paystackTransactionId:
+                  payment.id ?? null,
+                channel:
+                  payment.channel ?? null,
+                paidAt:
+                  payment.paid_at ?? null,
+                currency:
+                  payment.currency ?? null,
+              },
             },
-          },
-        });
+          }
+        );
 
         await tx.pitnexProfile.update({
           where: {
