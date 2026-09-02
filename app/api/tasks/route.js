@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const DEVELOPMENT_USER_ID =
-  process.env.DEVELOPMENT_USER_ID;
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const MAX_DAILY_TASKS = 6;
 
 export async function GET() {
   try {
-    if (!DEVELOPMENT_USER_ID) {
+    const supabase =
+      await createSupabaseServerClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "PITNEX user authentication is not configured yet.",
+          error: "You must be logged in.",
         },
-        { status: 503 }
+        { status: 401 }
       );
     }
 
@@ -35,7 +40,7 @@ export async function GET() {
       FROM pitnex_tasks t
       LEFT JOIN pitnex_user_tasks ut
         ON ut.task_id = t.id
-        AND ut.user_id = ${DEVELOPMENT_USER_ID}::uuid
+        AND ut.user_id = ${user.id}::uuid
       WHERE t.is_active = true
         AND (
           t.starts_at IS NULL
@@ -51,7 +56,7 @@ export async function GET() {
     const dailyCount = await prisma.$queryRaw`
       SELECT COUNT(*)::int AS count
       FROM pitnex_user_tasks
-      WHERE user_id = ${DEVELOPMENT_USER_ID}::uuid
+      WHERE user_id = ${user.id}::uuid
         AND assigned_date = CURRENT_DATE
         AND status IN (
           'PENDING',
@@ -106,8 +111,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const {
       type = "ARTICLE",
@@ -125,8 +129,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Task title is required.",
+          error: "Task title is required.",
         },
         { status: 400 }
       );
@@ -147,21 +150,16 @@ export async function POST(request) {
     }
 
     const rewardKobo =
-      Math.round(
-        Number(rewardNaira) * 100
-      );
+      Math.round(Number(rewardNaira) * 100);
 
     if (
-      !Number.isFinite(
-        rewardKobo
-      ) ||
+      !Number.isFinite(rewardKobo) ||
       rewardKobo <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Invalid task reward.",
+          error: "Invalid task reward.",
         },
         { status: 400 }
       );
@@ -175,8 +173,7 @@ export async function POST(request) {
 
     if (
       max !== null &&
-      (!Number.isInteger(max) ||
-        max < 1)
+      (!Number.isInteger(max) || max < 1)
     ) {
       return NextResponse.json(
         {
@@ -207,16 +204,8 @@ export async function POST(request) {
         ${articleUrl?.trim() || null},
         ${rewardKobo},
         ${max},
-        ${
-          startsAt
-            ? new Date(startsAt)
-            : null
-        },
-        ${
-          endsAt
-            ? new Date(endsAt)
-            : null
-        },
+        ${startsAt ? new Date(startsAt) : null},
+        ${endsAt ? new Date(endsAt) : null},
         ${Boolean(active)}
       )
       RETURNING
@@ -236,8 +225,7 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: true,
-        message:
-          "Task created successfully.",
+        message: "Task created successfully.",
         task: tasks[0],
       },
       { status: 201 }
@@ -251,8 +239,7 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Unable to create task.",
+        error: "Unable to create task.",
       },
       { status: 500 }
     );
