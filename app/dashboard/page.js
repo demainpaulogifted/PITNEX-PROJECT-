@@ -1,36 +1,142 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Flame,
-  ListChecks,
-  Gamepad2,
-  TrendingUp,
+  Wallet,
+  ArrowUpRight,
   ArrowDownToLine,
-  Crown,
-  X,
+  UserRound,
+  LogOut,
   Loader2,
+  ShieldCheck,
+  X,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-import Header from "@/components/Header";
-import WithdrawalTimer from "@/components/WithdrawalTimer";
+export default function DashboardPage() {
+  const router = useRouter();
 
-export default function Dashboard() {
-  const [showUpgrade, setShowUpgrade] = useState(false);
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [wallet, setWallet] = useState(null);
+
+  const [loading, setLoading] = useState(true);
+  const [walletLoading, setWalletLoading] =
+    useState(true);
+
+  const [upgradeOpen, setUpgradeOpen] =
+    useState(false);
+
+  const [upgradeLoading, setUpgradeLoading] =
+    useState(false);
+
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  async function startUpgrade() {
-    setMessage("");
+  useEffect(() => {
+    let mounted = true;
 
-    if (!email.trim()) {
-      setMessage("Please enter your email address.");
-      return;
+    async function loadAccount() {
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError || !user) {
+          router.replace("/login");
+          return;
+        }
+
+        if (mounted) {
+          setUser(user);
+        }
+      } catch (err) {
+        console.error(
+          "Dashboard authentication error:",
+          err
+        );
+
+        router.replace("/login");
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     }
 
-    setLoading(true);
+    loadAccount();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let mounted = true;
+
+    async function loadWallet() {
+      try {
+        const response = await fetch(
+          "/api/wallet/balance",
+          {
+            cache: "no-store",
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              "Unable to load wallet."
+          );
+        }
+
+        if (mounted) {
+          setWallet(data.wallet);
+        }
+      } catch (err) {
+        console.error(
+          "Dashboard wallet error:",
+          err
+        );
+
+        if (mounted) {
+          setError(
+            err.message ||
+              "Unable to load wallet balance."
+          );
+        }
+      } finally {
+        if (mounted) {
+          setWalletLoading(false);
+        }
+      }
+    }
+
+    loadWallet();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+
+    router.replace("/login");
+    router.refresh();
+  }
+
+  async function handleUpgrade() {
+    setError("");
+    setMessage("");
+    setUpgradeLoading(true);
 
     try {
       const response = await fetch(
@@ -38,368 +144,568 @@ export default function Dashboard() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-          body: JSON.stringify({
-            email: email.trim(),
-          }),
+          body: JSON.stringify({}),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
-            "Unable to start payment."
-        );
-      }
-
-      if (!data.authorizationUrl) {
-        throw new Error(
-          "Paystack payment URL was not returned."
+            "Unable to initialize payment."
         );
       }
 
       window.location.href =
         data.authorizationUrl;
-    } catch (error) {
-      setMessage(
-        error.message ||
-          "Unable to start payment."
+    } catch (err) {
+      console.error(
+        "Upgrade initialization error:",
+        err
       );
-      setLoading(false);
+
+      setError(
+        err.message ||
+          "Unable to start upgrade payment."
+      );
+
+      setUpgradeLoading(false);
     }
   }
 
+  if (loading) {
+    return (
+      <main className="loading-page">
+        <Loader2
+          size={38}
+          className="spinner"
+        />
+
+        <p>Loading your dashboard...</p>
+
+        <style jsx>{`
+          .loading-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: #f7f7f7;
+          }
+
+          .loading-page p {
+            margin: 0;
+            color: #666;
+          }
+
+          .spinner {
+            animation: spin 1s linear infinite;
+          }
+
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+      </main>
+    );
+  }
+
+  const email =
+    user?.email || "PITNEX Member";
+
+  const balanceKobo =
+    wallet?.balanceKobo ?? 0;
+
+  const balanceNaira =
+    Number(balanceKobo) / 100;
+
+  const formattedBalance =
+    balanceNaira.toLocaleString(
+      "en-NG",
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }
+    );
+
   return (
-    <>
-      <Header />
+    <main className="dashboard-page">
+      <div className="dashboard-container">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">
+              PITNEX
+            </p>
 
-      <main className="dashboard-page">
-        <section className="dashboard-container">
-          <div className="dashboard-card">
-            <div className="dashboard-top">
-              <div>
-                <span className="dashboard-greeting">
-                  GOOD AFTERNOON
-                </span>
+            <h1>
+              Welcome back 👋
+            </h1>
 
-                <span className="wallet-label">
-                  WALLET BALANCE
-                </span>
+            <p className="email">
+              {email}
+            </p>
+          </div>
 
-                <strong className="wallet-balance">
-                  ₦0.00
-                </strong>
-              </div>
+          <button
+            type="button"
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            <LogOut size={17} />
+            Logout
+          </button>
+        </header>
 
-              <div className="dashboard-actions">
-                <button
-                  type="button"
-                  className="invest-button"
-                  onClick={() =>
-                    setShowUpgrade(true)
-                  }
-                >
-                  <Crown
-                    size={16}
-                    style={{
-                      marginRight: "6px",
-                    }}
-                  />
-                  Upgrade
-                </button>
+        {error && (
+          <div className="alert error">
+            {error}
+          </div>
+        )}
 
-                <Link
-                  href="/withdraw"
-                  className="withdraw-button"
-                >
-                  Withdraw
-                </Link>
-              </div>
+        {message && (
+          <div className="alert success">
+            {message}
+          </div>
+        )}
+
+        <section className="balance-card">
+          <div className="balance-top">
+            <div className="wallet-icon">
+              <Wallet size={24} />
             </div>
 
-            <WithdrawalTimer />
+            <span>Available balance</span>
           </div>
 
-          <div className="dashboard-grid">
-            <Link
-              href="/check-in"
-              className="dashboard-item"
-            >
-              <Flame />
-              <span>Check-in</span>
-            </Link>
-
-            <Link
-              href="/tasks"
-              className="dashboard-item"
-            >
-              <ListChecks />
-              <span>Tasks</span>
-            </Link>
-
-            <Link
-              href="/games"
-              className="dashboard-item"
-            >
-              <Gamepad2 />
-              <span>Games</span>
-            </Link>
-
-            <Link
-              href="/packages"
-              className="dashboard-item"
-            >
-              <TrendingUp />
-              <span>Packages</span>
-            </Link>
-
-            <Link
-              href="/withdraw"
-              className="dashboard-item"
-            >
-              <ArrowDownToLine />
-              <span>Withdraw</span>
-            </Link>
+          <div className="balance">
+            {walletLoading ? (
+              <Loader2
+                size={28}
+                className="spinner"
+              />
+            ) : (
+              <>₦{formattedBalance}</>
+            )}
           </div>
+
+          <p>
+            Your current PITNEX wallet balance
+          </p>
         </section>
-      </main>
 
-      {showUpgrade && (
-        <div
-          onClick={() => {
-            if (!loading) {
-              setShowUpgrade(false);
-              setMessage("");
+        <section className="quick-actions">
+          <Link
+            href="/tasks"
+            className="action-card"
+          >
+            <ArrowUpRight size={21} />
+
+            <div>
+              <strong>
+                Earn from Tasks
+              </strong>
+
+              <span>
+                View available earning tasks
+              </span>
+            </div>
+          </Link>
+
+          <button
+            type="button"
+            className="action-card"
+            onClick={() =>
+              setUpgradeOpen(true)
             }
-          }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background:
-              "rgba(0, 0, 0, 0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-            zIndex: 1000,
-          }}
+          >
+            <ShieldCheck size={21} />
+
+            <div>
+              <strong>
+                Upgrade Account
+              </strong>
+
+              <span>
+                Upgrade for ₦1,700
+              </span>
+            </div>
+          </button>
+
+          <Link
+            href="/withdraw"
+            className="action-card"
+          >
+            <ArrowDownToLine size={21} />
+
+            <div>
+              <strong>
+                Withdraw
+              </strong>
+
+              <span>
+                Request a withdrawal
+              </span>
+            </div>
+          </Link>
+
+          <Link
+            href="/profile"
+            className="action-card"
+          >
+            <UserRound size={21} />
+
+            <div>
+              <strong>
+                My Profile
+              </strong>
+
+              <span>
+                Manage your account
+              </span>
+            </div>
+          </Link>
+        </section>
+      </div>
+
+      {upgradeOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={() =>
+            !upgradeLoading &&
+            setUpgradeOpen(false)
+          }
         >
-          <div
+          <section
+            className="upgrade-modal"
             onClick={(event) =>
               event.stopPropagation()
             }
-            style={{
-              width: "100%",
-              maxWidth: "430px",
-              background: "#fff",
-              borderRadius: "22px",
-              padding: "26px",
-              boxShadow:
-                "0 20px 60px rgba(0,0,0,0.2)",
-            }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent:
-                  "space-between",
-                gap: "16px",
-              }}
+            <button
+              type="button"
+              className="close-button"
+              onClick={() =>
+                !upgradeLoading &&
+                setUpgradeOpen(false)
+              }
             >
-              <div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent:
-                      "center",
-                    width: "46px",
-                    height: "46px",
-                    borderRadius: "14px",
-                    background: "#111",
-                    color: "#fff",
-                    marginBottom: "14px",
-                  }}
-                >
-                  <Crown size={22} />
-                </div>
+              <X size={20} />
+            </button>
 
-                <h2
-                  style={{
-                    margin: 0,
-                    fontSize: "24px",
-                  }}
-                >
-                  Upgrade your account
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowUpgrade(false)
-                }
-                disabled={loading}
-                aria-label="Close"
-                style={{
-                  border: 0,
-                  background: "transparent",
-                  cursor: loading
-                    ? "not-allowed"
-                    : "pointer",
-                  padding: "4px",
-                }}
-              >
-                <X size={22} />
-              </button>
+            <div className="upgrade-icon">
+              <ShieldCheck size={30} />
             </div>
 
-            <p
-              style={{
-                marginTop: "14px",
-                lineHeight: 1.6,
-                opacity: 0.7,
-              }}
-            >
-              Upgrade your PITNEX account for
-              <strong> ₦1,700</strong>.
-              Successful payment activates your
-              upgraded account.
+            <h2>
+              Upgrade your PITNEX account
+            </h2>
+
+            <p>
+              Complete the one-time ₦1,700
+              account upgrade payment to
+              unlock upgraded account
+              features.
             </p>
 
-            <div
-              style={{
-                margin: "20px 0",
-                padding: "18px",
-                borderRadius: "14px",
-                background: "#f6f6f6",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "13px",
-                  opacity: 0.65,
-                }}
-              >
-                UPGRADE FEE
-              </div>
-
-              <div
-                style={{
-                  fontSize: "28px",
-                  fontWeight: 800,
-                  marginTop: "4px",
-                }}
-              >
-                ₦1,700
-              </div>
+            <div className="upgrade-price">
+              ₦1,700
             </div>
-
-            <label
-              style={{
-                display: "block",
-                fontSize: "14px",
-                fontWeight: 700,
-                marginBottom: "8px",
-              }}
-            >
-              Email address
-            </label>
-
-            <input
-              type="email"
-              value={email}
-              onChange={(event) =>
-                setEmail(event.target.value)
-              }
-              placeholder="you@example.com"
-              disabled={loading}
-              autoComplete="email"
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "14px",
-                borderRadius: "12px",
-                border: "1px solid #ddd",
-                outline: "none",
-                fontSize: "15px",
-              }}
-            />
-
-            {message && (
-              <p
-                style={{
-                  marginTop: "12px",
-                  color: "#b42318",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                }}
-              >
-                {message}
-              </p>
-            )}
 
             <button
               type="button"
-              onClick={startUpgrade}
-              disabled={loading}
-              style={{
-                width: "100%",
-                marginTop: "18px",
-                padding: "15px",
-                border: 0,
-                borderRadius: "12px",
-                background: "#111",
-                color: "#fff",
-                cursor: loading
-                  ? "not-allowed"
-                  : "pointer",
-                fontSize: "16px",
-                fontWeight: 800,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}
+              className="upgrade-button"
+              onClick={handleUpgrade}
+              disabled={upgradeLoading}
             >
-              {loading ? (
+              {upgradeLoading ? (
                 <>
                   <Loader2
-                    size={18}
-                    className="pitnex-spin"
+                    size={19}
+                    className="spinner"
                   />
-                  Connecting to Paystack...
+                  Opening Paystack...
                 </>
               ) : (
-                <>
-                  <Crown size={18} />
-                  Pay ₦1,700 & Upgrade
-                </>
+                "Continue to Paystack"
               )}
             </button>
 
-            <p
-              style={{
-                textAlign: "center",
-                fontSize: "12px",
-                opacity: 0.55,
-                marginTop: "14px",
-              }}
-            >
+            <small>
               You will be redirected to
-              Paystack to complete your payment
-              securely.
-            </p>
-          </div>
+              Paystack to complete the
+              payment securely.
+            </small>
+          </section>
         </div>
       )}
 
-      <style jsx global>{`
-        @keyframes pitnex-spin {
+      <style jsx>{`
+        .dashboard-page {
+          min-height: 100vh;
+          background: #f7f7f7;
+          padding: 24px 16px 50px;
+          box-sizing: border-box;
+        }
+
+        .dashboard-container {
+          width: 100%;
+          max-width: 900px;
+          margin: 0 auto;
+        }
+
+        .dashboard-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+
+        .eyebrow {
+          margin: 0 0 5px;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+        }
+
+        h1 {
+          margin: 0;
+          font-size: 30px;
+        }
+
+        .email {
+          margin: 7px 0 0;
+          color: #777;
+          font-size: 14px;
+        }
+
+        .logout-button {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          border: 1px solid #ddd;
+          background: #fff;
+          color: #111;
+          border-radius: 10px;
+          padding: 10px 13px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .balance-card {
+          background: #111;
+          color: #fff;
+          border-radius: 22px;
+          padding: 25px;
+          margin-bottom: 18px;
+        }
+
+        .balance-top {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: #ccc;
+          font-size: 14px;
+        }
+
+        .wallet-icon {
+          width: 42px;
+          height: 42px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 12px;
+          background: #252525;
+        }
+
+        .balance {
+          min-height: 48px;
+          display: flex;
+          align-items: center;
+          margin-top: 17px;
+          font-size: 38px;
+          font-weight: 900;
+        }
+
+        .balance-card p {
+          margin: 8px 0 0;
+          color: #aaa;
+          font-size: 13px;
+        }
+
+        .quick-actions {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 13px;
+        }
+
+        .action-card {
+          min-height: 92px;
+          display: flex;
+          align-items: center;
+          gap: 13px;
+          padding: 18px;
+          border: 1px solid #e2e2e2;
+          border-radius: 16px;
+          background: #fff;
+          color: #111;
+          text-decoration: none;
+          text-align: left;
+          cursor: pointer;
+          box-sizing: border-box;
+        }
+
+        .action-card > svg {
+          flex-shrink: 0;
+        }
+
+        .action-card div {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+
+        .action-card strong {
+          font-size: 15px;
+        }
+
+        .action-card span {
+          color: #777;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .alert {
+          margin-bottom: 15px;
+          padding: 12px 14px;
+          border-radius: 11px;
+          font-size: 14px;
+        }
+
+        .error {
+          background: #fff1f1;
+          color: #b42318;
+        }
+
+        .success {
+          background: #effcf3;
+          color: #18794e;
+        }
+
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          background: rgba(0, 0, 0, 0.55);
+          box-sizing: border-box;
+        }
+
+        .upgrade-modal {
+          position: relative;
+          width: 100%;
+          max-width: 420px;
+          background: #fff;
+          border-radius: 22px;
+          padding: 30px 24px;
+          text-align: center;
+          box-sizing: border-box;
+          box-shadow:
+            0 25px 70px rgba(0, 0, 0, 0.2);
+        }
+
+        .close-button {
+          position: absolute;
+          top: 14px;
+          right: 14px;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-radius: 50%;
+          background: #f3f3f3;
+          cursor: pointer;
+        }
+
+        .upgrade-icon {
+          width: 60px;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 16px;
+          border-radius: 17px;
+          background: #111;
+          color: #fff;
+        }
+
+        .upgrade-modal h2 {
+          margin: 0;
+          font-size: 24px;
+        }
+
+        .upgrade-modal p {
+          margin: 12px 0 0;
+          color: #666;
+          line-height: 1.6;
+        }
+
+        .upgrade-price {
+          margin: 20px 0;
+          font-size: 32px;
+          font-weight: 900;
+        }
+
+        .upgrade-button {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 15px;
+          border: 0;
+          border-radius: 12px;
+          background: #111;
+          color: #fff;
+          font-weight: 800;
+          font-size: 15px;
+          cursor: pointer;
+        }
+
+        .upgrade-button:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+
+        .upgrade-modal small {
+          display: block;
+          margin-top: 13px;
+          color: #888;
+          line-height: 1.5;
+        }
+
+        .spinner {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
           from {
             transform: rotate(0deg);
           }
@@ -409,10 +715,37 @@ export default function Dashboard() {
           }
         }
 
-        .pitnex-spin {
-          animation: pitnex-spin 1s linear infinite;
+        @media (max-width: 600px) {
+          .dashboard-header {
+            align-items: flex-start;
+          }
+
+          h1 {
+            font-size: 25px;
+          }
+
+          .logout-button {
+            padding: 9px;
+          }
+
+          .logout-button {
+            font-size: 0;
+          }
+
+          .logout-button svg {
+            width: 19px;
+            height: 19px;
+          }
+
+          .balance {
+            font-size: 32px;
+          }
+
+          .quick-actions {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
-    </>
+    </main>
   );
 }
