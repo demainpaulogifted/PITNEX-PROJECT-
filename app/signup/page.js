@@ -1,98 +1,99 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  UserPlus,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
   const router = useRouter();
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] =
-    useState("");
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  async function handleSignup(event) {
-    event.preventDefault();
+  function handleChange(e) {
+    setForm((current) => ({
+      ...current,
+      [e.target.name]: e.target.value,
+    }));
+  }
+
+  async function handleSignup(e) {
+    e.preventDefault();
 
     setError("");
-    setSuccess("");
+    setLoading(true);
 
-    const cleanName = fullName.trim();
-    const cleanEmail = email.trim().toLowerCase();
+    const fullName = form.fullName.trim();
+    const email = form.email.trim().toLowerCase();
+    const password = form.password;
 
-    if (!cleanName) {
+    if (!fullName) {
       setError("Please enter your full name.");
+      setLoading(false);
       return;
     }
 
-    if (!cleanEmail) {
+    if (!email) {
       setError("Please enter your email address.");
+      setLoading(false);
       return;
     }
 
     if (password.length < 8) {
-      setError(
-        "Your password must be at least 8 characters."
-      );
+      setError("Password must be at least 8 characters.");
+      setLoading(false);
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (password !== form.confirmPassword) {
       setError("Passwords do not match.");
+      setLoading(false);
       return;
     }
-
-    setLoading(true);
 
     try {
-      const {
-        data,
-        error: signupError,
-      } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          data: {
-            full_name: cleanName,
+      const { data, error: signupError } =
+        await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
           },
-        },
-      });
+        });
 
       if (signupError) {
         throw signupError;
       }
 
-      if (data.session) {
-        setSuccess(
-          "Account created successfully. Redirecting..."
-        );
-
-        setTimeout(() => {
-          router.replace("/dashboard");
-          router.refresh();
-        }, 1000);
-
+      /*
+       * When Supabase Confirm Email is OFF,
+       * Supabase returns an active session immediately.
+       */
+      if (data?.session) {
+        router.replace("/dashboard");
+        router.refresh();
         return;
       }
 
-      setSuccess(
-        "Account created successfully. Please check your email to confirm your account."
+      /*
+       * If there is no session, Supabase is still
+       * requiring email confirmation.
+       */
+      setError(
+        "Email verification is still enabled in Supabase. Please turn off Confirm email in Authentication → Providers → Email."
       );
     } catch (err) {
-      console.error("PITNEX signup error:", err);
+      console.error("Signup error:", err);
 
       setError(
         err?.message ||
@@ -104,295 +105,210 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="signup-page">
-      <section className="signup-card">
-        <div className="signup-icon">
-          <UserPlus size={30} />
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+        background: "#f8fafc",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "440px",
+          background: "#ffffff",
+          borderRadius: "20px",
+          padding: "32px",
+          boxShadow: "0 10px 35px rgba(0,0,0,0.08)",
+        }}
+      >
+        <div style={{ marginBottom: "28px" }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: "30px",
+              fontWeight: 800,
+              color: "#111827",
+            }}
+          >
+            Create your PITNEX account
+          </h1>
+
+          <p
+            style={{
+              marginTop: "8px",
+              color: "#6b7280",
+              lineHeight: 1.6,
+            }}
+          >
+            Create your account and start earning on PITNEX.
+          </p>
         </div>
 
-        <h1>Create your PITNEX account</h1>
-
-        <p className="signup-subtitle">
-          Join PITNEX and start earning from available
-          tasks and opportunities.
-        </p>
-
-        <form
-          onSubmit={handleSignup}
-          className="signup-form"
-        >
-          <div className="field">
-            <label htmlFor="fullName">
-              Full name
-            </label>
-
-            <input
-              id="fullName"
-              type="text"
-              placeholder="Enter your full name"
-              value={fullName}
-              onChange={(event) =>
-                setFullName(event.target.value)
-              }
-              autoComplete="name"
-              disabled={loading}
-            />
+        {error && (
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "12px 14px",
+              borderRadius: "10px",
+              background: "#fef2f2",
+              color: "#b91c1c",
+              fontSize: "14px",
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
           </div>
+        )}
 
-          <div className="field">
-            <label htmlFor="email">
-              Email address
-            </label>
+        <form onSubmit={handleSignup}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "7px",
+              fontWeight: 600,
+              color: "#374151",
+            }}
+          >
+            Full name
+          </label>
 
-            <input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) =>
-                setEmail(event.target.value)
-              }
-              autoComplete="email"
-              disabled={loading}
-            />
-          </div>
+          <input
+            type="text"
+            name="fullName"
+            value={form.fullName}
+            onChange={handleChange}
+            placeholder="Your full name"
+            autoComplete="name"
+            required
+            style={inputStyle}
+          />
 
-          <div className="field">
-            <label htmlFor="password">
-              Password
-            </label>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "7px",
+              marginTop: "18px",
+              fontWeight: 600,
+              color: "#374151",
+            }}
+          >
+            Email address
+          </label>
 
-            <input
-              id="password"
-              type="password"
-              placeholder="At least 8 characters"
-              value={password}
-              onChange={(event) =>
-                setPassword(event.target.value)
-              }
-              autoComplete="new-password"
-              disabled={loading}
-            />
-          </div>
+          <input
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="you@example.com"
+            autoComplete="email"
+            required
+            style={inputStyle}
+          />
 
-          <div className="field">
-            <label htmlFor="confirmPassword">
-              Confirm password
-            </label>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "7px",
+              marginTop: "18px",
+              fontWeight: 600,
+              color: "#374151",
+            }}
+          >
+            Password
+          </label>
 
-            <input
-              id="confirmPassword"
-              type="password"
-              placeholder="Enter your password again"
-              value={confirmPassword}
-              onChange={(event) =>
-                setConfirmPassword(
-                  event.target.value
-                )
-              }
-              autoComplete="new-password"
-              disabled={loading}
-            />
-          </div>
+          <input
+            type="password"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            required
+            style={inputStyle}
+          />
 
-          {error && (
-            <div className="message error">
-              <AlertCircle size={19} />
-              <span>{error}</span>
-            </div>
-          )}
+          <label
+            style={{
+              display: "block",
+              marginBottom: "7px",
+              marginTop: "18px",
+              fontWeight: 600,
+              color: "#374151",
+            }}
+          >
+            Confirm password
+          </label>
 
-          {success && (
-            <div className="message success">
-              <CheckCircle2 size={19} />
-              <span>{success}</span>
-            </div>
-          )}
+          <input
+            type="password"
+            name="confirmPassword"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            placeholder="Enter your password again"
+            autoComplete="new-password"
+            required
+            style={inputStyle}
+          />
 
           <button
             type="submit"
             disabled={loading}
-            className="signup-button"
+            style={{
+              width: "100%",
+              marginTop: "24px",
+              padding: "14px",
+              border: "none",
+              borderRadius: "10px",
+              background: loading ? "#9ca3af" : "#111827",
+              color: "#ffffff",
+              fontSize: "16px",
+              fontWeight: 700,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
           >
-            {loading ? (
-              <>
-                <Loader2
-                  size={19}
-                  className="spinner"
-                />
-                Creating account...
-              </>
-            ) : (
-              <>
-                <UserPlus size={19} />
-                Create account
-              </>
-            )}
+            {loading ? "Creating account..." : "Create account"}
           </button>
         </form>
 
-        <p className="login-text">
+        <p
+          style={{
+            marginTop: "22px",
+            textAlign: "center",
+            color: "#6b7280",
+            fontSize: "14px",
+          }}
+        >
           Already have an account?{" "}
-          <Link href="/login">
+          <Link
+            href="/login"
+            style={{
+              color: "#111827",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
             Log in
           </Link>
         </p>
-      </section>
-
-      <style jsx>{`
-        .signup-page {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-          background: #f7f7f7;
-          box-sizing: border-box;
-        }
-
-        .signup-card {
-          width: 100%;
-          max-width: 440px;
-          background: #ffffff;
-          border: 1px solid #e5e5e5;
-          border-radius: 22px;
-          padding: 32px 24px;
-          box-shadow:
-            0 15px 45px rgba(0, 0, 0, 0.08);
-          box-sizing: border-box;
-        }
-
-        .signup-icon {
-          width: 58px;
-          height: 58px;
-          border-radius: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #111111;
-          color: #ffffff;
-          margin-bottom: 18px;
-        }
-
-        h1 {
-          margin: 0;
-          font-size: 28px;
-          line-height: 1.2;
-        }
-
-        .signup-subtitle {
-          margin: 12px 0 26px;
-          color: #666666;
-          line-height: 1.6;
-        }
-
-        .signup-form {
-          display: flex;
-          flex-direction: column;
-          gap: 17px;
-        }
-
-        .field {
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-        }
-
-        .field label {
-          font-size: 14px;
-          font-weight: 700;
-          color: #222222;
-        }
-
-        .field input {
-          width: 100%;
-          padding: 14px 13px;
-          border: 1px solid #dcdcdc;
-          border-radius: 11px;
-          background: #ffffff;
-          color: #111111;
-          font-size: 15px;
-          outline: none;
-          box-sizing: border-box;
-        }
-
-        .field input:focus {
-          border-color: #111111;
-        }
-
-        .field input:disabled {
-          opacity: 0.65;
-        }
-
-        .message {
-          display: flex;
-          align-items: flex-start;
-          gap: 9px;
-          padding: 12px;
-          border-radius: 11px;
-          font-size: 14px;
-          line-height: 1.5;
-        }
-
-        .error {
-          background: #fff1f1;
-          color: #b42318;
-        }
-
-        .success {
-          background: #effcf3;
-          color: #18794e;
-        }
-
-        .signup-button {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          border: 0;
-          border-radius: 12px;
-          padding: 15px;
-          background: #111111;
-          color: #ffffff;
-          font-size: 15px;
-          font-weight: 800;
-          cursor: pointer;
-          margin-top: 3px;
-        }
-
-        .signup-button:disabled {
-          opacity: 0.65;
-          cursor: not-allowed;
-        }
-
-        .login-text {
-          text-align: center;
-          margin: 24px 0 0;
-          color: #666666;
-          font-size: 14px;
-        }
-
-        .login-text a {
-          color: #111111;
-          font-weight: 800;
-          text-decoration: none;
-        }
-
-        .spinner {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          from {
-            transform: rotate(0deg);
-          }
-
-          to {
-            transform: rotate(360deg);
-          }
-        }
-      `}</style>
+      </div>
     </main>
   );
 }
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "13px 14px",
+  border: "1px solid #d1d5db",
+  borderRadius: "10px",
+  outline: "none",
+  fontSize: "15px",
+  color: "#111827",
+  background: "#ffffff",
+};
