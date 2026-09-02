@@ -31,85 +31,110 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
 
-    const fullName = form.fullName.trim();
-    const email = form.email.trim().toLowerCase();
-    const password = form.password;
-
-    if (!fullName) {
-      setError("Please enter your full name.");
-      setLoading(false);
-      return;
-    }
-
-    if (!email) {
-      setError("Please enter your email address.");
-      setLoading(false);
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      setLoading(false);
-      return;
-    }
-
-    if (password !== form.confirmPassword) {
-      setError("Passwords do not match.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const { data, error: signupError } =
-        await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-            },
-          },
-        });
+      const fullName = form.fullName.trim();
+      const email = form.email.trim().toLowerCase();
+      const password = form.password;
 
-      if (signupError) {
-        throw signupError;
+      if (!fullName) {
+        throw new Error("Please enter your full name.");
       }
 
+      if (!email) {
+        throw new Error("Please enter your email address.");
+      }
+
+      if (password.length < 8) {
+        throw new Error(
+          "Password must be at least 8 characters."
+        );
+      }
+
+      if (password !== form.confirmPassword) {
+        throw new Error("Passwords do not match.");
+      }
+
+      const {
+        data,
+        error: signupError,
+      } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (signupError) {
+        console.error(
+          "Supabase signup error:",
+          signupError
+        );
+
+        throw new Error(signupError.message);
+      }
+
+      /*
+       * Supabase may return a user without a session.
+       * Do NOT automatically assume this means email
+       * verification is enabled.
+       */
+
       if (data?.session) {
-        // Capture referral safely without useSearchParams()
-        const referrerId =
-          typeof window !== "undefined"
-            ? new URLSearchParams(
-                window.location.search
-              ).get("ref")
-            : null;
-
-        if (referrerId && data.user?.id) {
-          try {
-            await fetch("/api/referrals/capture", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                referrerId,
-              }),
-            });
-          } catch (referralError) {
-            console.error(
-              "Referral capture error:",
-              referralError
-            );
-          }
-        }
-
         router.replace("/dashboard");
         router.refresh();
         return;
       }
 
-      setError(
-        "Email verification is still enabled in Supabase. Please turn off Confirm email in Authentication → Providers → Email."
+      if (data?.user) {
+        /*
+         * The account was created successfully.
+         *
+         * If Supabase requires confirmation, the auth
+         * response will normally expose that through the
+         * user's confirmation state.
+         */
+
+        const identities =
+          data.user.identities || [];
+
+        if (identities.length === 0) {
+          throw new Error(
+            "This email may already be registered. Please try logging in."
+          );
+        }
+
+        /*
+         * Try refreshing the session once before showing
+         * an error. This handles cases where the browser
+         * client has not immediately received the session.
+         */
+
+        const {
+          data: sessionData,
+        } = await supabase.auth.getSession();
+
+        if (sessionData?.session) {
+          router.replace("/dashboard");
+          router.refresh();
+          return;
+        }
+
+        /*
+         * The account exists, but Supabase did not return
+         * an authenticated session.
+         */
+        setError(
+          "Your account was created, but PITNEX could not sign you in automatically. Please try logging in."
+        );
+
+        return;
+      }
+
+      throw new Error(
+        "PITNEX could not create your account."
       );
     } catch (err) {
       console.error("Signup error:", err);
@@ -138,10 +163,11 @@ export default function SignupPage() {
         style={{
           width: "100%",
           maxWidth: "440px",
-          background: "#ffffff",
+          background: "#fff",
           borderRadius: "20px",
           padding: "32px",
-          boxShadow: "0 10px 35px rgba(0,0,0,0.08)",
+          boxShadow:
+            "0 10px 35px rgba(0,0,0,0.08)",
         }}
       >
         <div style={{ marginBottom: "28px" }}>
@@ -163,7 +189,8 @@ export default function SignupPage() {
               lineHeight: 1.6,
             }}
           >
-            Create your account and start earning on PITNEX.
+            Create your account and start earning
+            on PITNEX.
           </p>
         </div>
 
@@ -184,7 +211,14 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup}>
-          <label style={labelStyle}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "7px",
+              fontWeight: 600,
+              color: "#374151",
+            }}
+          >
             Full name
           </label>
 
@@ -199,7 +233,9 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label style={labelStyle}>
+          <label
+            style={labelStyle}
+          >
             Email address
           </label>
 
@@ -214,7 +250,9 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label style={labelStyle}>
+          <label
+            style={labelStyle}
+          >
             Password
           </label>
 
@@ -229,7 +267,9 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label style={labelStyle}>
+          <label
+            style={labelStyle}
+          >
             Confirm password
           </label>
 
@@ -256,7 +296,7 @@ export default function SignupPage() {
               background: loading
                 ? "#9ca3af"
                 : "#111827",
-              color: "#ffffff",
+              color: "#fff",
               fontSize: "16px",
               fontWeight: 700,
               cursor: loading
@@ -312,5 +352,5 @@ const inputStyle = {
   outline: "none",
   fontSize: "15px",
   color: "#111827",
-  background: "#ffffff",
+  background: "#fff",
 };
