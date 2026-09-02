@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [form, setForm] = useState({
     fullName: "",
@@ -35,10 +34,6 @@ export default function SignupPage() {
     const fullName = form.fullName.trim();
     const email = form.email.trim().toLowerCase();
     const password = form.password;
-
-    // Keep the referral information from:
-    // /signup?ref=USER_ID
-    const referrerId = searchParams.get("ref");
 
     if (!fullName) {
       setError("Please enter your full name.");
@@ -80,16 +75,15 @@ export default function SignupPage() {
         throw signupError;
       }
 
-      /*
-       * Supabase may return a session immediately
-       * when email confirmation is disabled.
-       */
       if (data?.session) {
-        /*
-         * If this signup came from an invite link,
-         * record the referral after the new account
-         * has been created.
-         */
+        // Capture referral safely without useSearchParams()
+        const referrerId =
+          typeof window !== "undefined"
+            ? new URLSearchParams(
+                window.location.search
+              ).get("ref")
+            : null;
+
         if (referrerId && data.user?.id) {
           try {
             await fetch("/api/referrals/capture", {
@@ -102,10 +96,6 @@ export default function SignupPage() {
               }),
             });
           } catch (referralError) {
-            /*
-             * Do not block account creation if referral
-             * recording temporarily fails.
-             */
             console.error(
               "Referral capture error:",
               referralError
@@ -118,10 +108,6 @@ export default function SignupPage() {
         return;
       }
 
-      /*
-       * If there is no session, Supabase is still
-       * requiring email confirmation.
-       */
       setError(
         "Email verification is still enabled in Supabase. Please turn off Confirm email in Authentication → Providers → Email."
       );
@@ -198,14 +184,7 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup}>
-          <label
-            style={{
-              display: "block",
-              marginBottom: "7px",
-              fontWeight: 600,
-              color: "#374151",
-            }}
-          >
+          <label style={labelStyle}>
             Full name
           </label>
 
@@ -220,15 +199,7 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label
-            style={{
-              display: "block",
-              marginBottom: "7px",
-              marginTop: "18px",
-              fontWeight: 600,
-              color: "#374151",
-            }}
-          >
+          <label style={labelStyle}>
             Email address
           </label>
 
@@ -243,15 +214,7 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label
-            style={{
-              display: "block",
-              marginBottom: "7px",
-              marginTop: "18px",
-              fontWeight: 600,
-              color: "#374151",
-            }}
-          >
+          <label style={labelStyle}>
             Password
           </label>
 
@@ -266,15 +229,7 @@ export default function SignupPage() {
             style={inputStyle}
           />
 
-          <label
-            style={{
-              display: "block",
-              marginBottom: "7px",
-              marginTop: "18px",
-              fontWeight: 600,
-              color: "#374151",
-            }}
-          >
+          <label style={labelStyle}>
             Confirm password
           </label>
 
@@ -298,14 +253,20 @@ export default function SignupPage() {
               padding: "14px",
               border: "none",
               borderRadius: "10px",
-              background: loading ? "#9ca3af" : "#111827",
+              background: loading
+                ? "#9ca3af"
+                : "#111827",
               color: "#ffffff",
               fontSize: "16px",
               fontWeight: 700,
-              cursor: loading ? "not-allowed" : "pointer",
+              cursor: loading
+                ? "not-allowed"
+                : "pointer",
             }}
           >
-            {loading ? "Creating account..." : "Create account"}
+            {loading
+              ? "Creating account..."
+              : "Create account"}
           </button>
         </form>
 
@@ -333,6 +294,14 @@ export default function SignupPage() {
     </main>
   );
 }
+
+const labelStyle = {
+  display: "block",
+  marginBottom: "7px",
+  marginTop: "18px",
+  fontWeight: 600,
+  color: "#374151",
+};
 
 const inputStyle = {
   width: "100%",
