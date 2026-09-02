@@ -934,81 +934,80 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-    </main>
 
-    {/* FOOTER */}
-    <footer className="border-t border-white/10 bg-slate-950">
-      <div className="mx-auto max-w-7xl px-5 py-10 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-          <div>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400 text-sm font-black text-slate-950">
-                P
-              </span>
+      {/* FOOTER */}
+      <footer className="border-t border-white/10 bg-slate-950">
+        <div className="mx-auto max-w-7xl px-5 py-10 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <div>
+              <Link
+                href="/"
+                className="inline-flex items-center gap-2"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400 text-sm font-black text-slate-950">
+                  P
+                </span>
 
-              <span className="text-lg font-black tracking-tight text-white">
-                PITNEX
-              </span>
-            </Link>
+                <span className="text-lg font-black tracking-tight text-white">
+                  PITNEX
+                </span>
+              </Link>
 
-            <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">
-              A simple platform for completing eligible online activities,
-              earning rewards and managing your PITNEX wallet.
+              <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">
+                A simple platform for completing eligible online activities,
+                earning rewards and managing your PITNEX wallet.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-400">
+              <Link
+                href="/dashboard"
+                className="transition hover:text-white"
+              >
+                Dashboard
+              </Link>
+
+              <Link
+                href="/tasks"
+                className="transition hover:text-white"
+              >
+                Tasks
+              </Link>
+
+              <Link
+                href="/invite"
+                className="transition hover:text-white"
+              >
+                Invite & Earn
+              </Link>
+
+              <Link
+                href="/login"
+                className="transition hover:text-white"
+              >
+                Login
+              </Link>
+
+              <Link
+                href="/signup"
+                className="transition hover:text-white"
+              >
+                Sign up
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              © {new Date().getFullYear()} PITNEX. All rights reserved.
+            </p>
+
+            <p>
+              Built for a simple, transparent earning experience.
             </p>
           </div>
-
-          <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-400">
-            <Link
-              href="/dashboard"
-              className="transition hover:text-white"
-            >
-              Dashboard
-            </Link>
-
-            <Link
-              href="/tasks"
-              className="transition hover:text-white"
-            >
-              Tasks
-            </Link>
-
-            <Link
-              href="/invite"
-              className="transition hover:text-white"
-            >
-              Invite & Earn
-            </Link>
-
-            <Link
-              href="/login"
-              className="transition hover:text-white"
-            >
-              Login
-            </Link>
-
-            <Link
-              href="/signup"
-              className="transition hover:text-white"
-            >
-              Sign up
-            </Link>
-          </div>
         </div>
-
-        <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            © {new Date().getFullYear()} PITNEX. All rights reserved.
-          </p>
-
-          <p>
-            Built for a simple, transparent earning experience.
-          </p>
-        </div>
-      </div>
-    </footer>
-  </div>
+      </footer>
+    </div>
   );
 }
