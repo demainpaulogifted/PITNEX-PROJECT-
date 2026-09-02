@@ -70,14 +70,14 @@ export default function SignupPage() {
         });
 
       if (signupError) {
-        console.error("Supabase signup error:", signupError);
+        console.error("Signup error:", signupError);
         setError(signupError.message);
         return;
       }
 
       /*
-       * If Supabase returns a session, the account is
-       * immediately authenticated.
+       * Confirm Email OFF:
+       * Supabase should return a session immediately.
        */
       if (data?.session) {
         router.replace("/dashboard");
@@ -86,33 +86,52 @@ export default function SignupPage() {
       }
 
       /*
-       * If there is a user but no session, do not display
-       * the old misleading "Confirm email is enabled"
-       * message.
-       *
-       * Supabase may require confirmation depending on
-       * the project's Auth configuration.
+       * Give Supabase's browser client a moment to persist
+       * the newly-created session.
        */
-      if (data?.user) {
-        const identities = data.user.identities || [];
+      const {
+        data: sessionData,
+      } = await supabase.auth.getSession();
 
-        if (identities.length === 0) {
-          setError(
-            "An account with this email may already exist. Please log in."
-          );
-          return;
-        }
-
-        setError(
-          "Account created successfully. Please log in to continue."
-        );
-
+      if (sessionData?.session) {
+        router.replace("/dashboard");
+        router.refresh();
         return;
       }
 
-      setError(
-        "We could not complete your registration. Please try again."
+      /*
+       * Listen briefly for the auth state event.
+       * This catches cases where the session arrives
+       * immediately after signUp().
+       */
+      let redirected = false;
+
+      const {
+        data: listener,
+      } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          if (
+            session &&
+            !redirected &&
+            (event === "SIGNED_IN" ||
+              event === "INITIAL_SESSION")
+          ) {
+            redirected = true;
+            router.replace("/dashboard");
+            router.refresh();
+          }
+        }
       );
+
+      setTimeout(() => {
+        listener?.subscription?.unsubscribe();
+
+        if (!redirected) {
+          setError(
+            "Your account was created, but Supabase did not start a session. Please check that Confirm email is OFF in the PITNEX Supabase project."
+          );
+        }
+      }, 1500);
     } catch (err) {
       console.error("Signup error:", err);
 
@@ -188,14 +207,7 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup}>
-          <label
-            style={{
-              display: "block",
-              marginBottom: "7px",
-              fontWeight: 600,
-              color: "#374151",
-            }}
-          >
+          <label style={labelStyle}>
             Full name
           </label>
 
