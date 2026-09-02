@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [form, setForm] = useState({
     fullName: "",
@@ -34,6 +35,10 @@ export default function SignupPage() {
     const fullName = form.fullName.trim();
     const email = form.email.trim().toLowerCase();
     const password = form.password;
+
+    // Keep the referral information from:
+    // /signup?ref=USER_ID
+    const referrerId = searchParams.get("ref");
 
     if (!fullName) {
       setError("Please enter your full name.");
@@ -76,10 +81,38 @@ export default function SignupPage() {
       }
 
       /*
-       * When Supabase Confirm Email is OFF,
-       * Supabase returns an active session immediately.
+       * Supabase may return a session immediately
+       * when email confirmation is disabled.
        */
       if (data?.session) {
+        /*
+         * If this signup came from an invite link,
+         * record the referral after the new account
+         * has been created.
+         */
+        if (referrerId && data.user?.id) {
+          try {
+            await fetch("/api/referrals/capture", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                referrerId,
+              }),
+            });
+          } catch (referralError) {
+            /*
+             * Do not block account creation if referral
+             * recording temporarily fails.
+             */
+            console.error(
+              "Referral capture error:",
+              referralError
+            );
+          }
+        }
+
         router.replace("/dashboard");
         router.refresh();
         return;
