@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 const MAX_DAILY_TASKS = 6;
 
@@ -9,12 +10,9 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  const [selectedTask, setSelectedTask] =
-    useState(null);
-  const [proofFile, setProofFile] =
-    useState(null);
-  const [proofPreview, setProofPreview] =
-    useState("");
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreview, setProofPreview] = useState("");
 
   useEffect(() => {
     loadTasks();
@@ -25,34 +23,40 @@ export default function TasksPage() {
       setLoading(true);
       setMessage("");
 
-      const response = await fetch(
-        "/api/tasks",
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const data =
-        await response.json();
+      if (!session?.access_token) {
+        setMessage("You must be logged in.");
+        setTasks([]);
+        return;
+      }
+
+      const response = await fetch("/api/tasks", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        cache: "no-store",
+      });
+
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-            "Unable to load tasks."
+          data.error || "Unable to load tasks."
         );
       }
 
       setTasks(
-        Array.isArray(data.tasks)
-          ? data.tasks
-          : []
+        Array.isArray(data.tasks) ? data.tasks : []
       );
     } catch (error) {
       console.error(error);
+
       setMessage(
-        error.message ||
-          "Unable to load tasks."
+        error?.message || "Unable to load tasks."
       );
     } finally {
       setLoading(false);
@@ -70,9 +74,7 @@ export default function TasksPage() {
     if (submitting) return;
 
     if (proofPreview) {
-      URL.revokeObjectURL(
-        proofPreview
-      );
+      URL.revokeObjectURL(proofPreview);
     }
 
     setSelectedTask(null);
@@ -82,8 +84,7 @@ export default function TasksPage() {
   }
 
   function handleProofChange(event) {
-    const file =
-      event.target.files?.[0];
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
@@ -102,17 +103,11 @@ export default function TasksPage() {
     }
 
     if (proofPreview) {
-      URL.revokeObjectURL(
-        proofPreview
-      );
+      URL.revokeObjectURL(proofPreview);
     }
 
     setProofFile(file);
-
-    setProofPreview(
-      URL.createObjectURL(file)
-    );
-
+    setProofPreview(URL.createObjectURL(file));
     setMessage("");
   }
 
@@ -132,15 +127,17 @@ export default function TasksPage() {
       setSubmitting(true);
       setMessage("");
 
-      /*
-       * IMPORTANT:
-       * The existing submit API accepts
-       * multipart/form-data directly.
-       *
-       * We do NOT use /api/tasks/upload.
-       */
-      const formData =
-        new FormData();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error(
+          "Your session has expired. Please log in again."
+        );
+      }
+
+      const formData = new FormData();
 
       formData.append(
         "taskId",
@@ -152,17 +149,19 @@ export default function TasksPage() {
         proofFile
       );
 
-      const response =
-        await fetch(
-          "/api/tasks/submit",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
+      const response = await fetch(
+        "/api/tasks/submit",
+        {
+          method: "POST",
+          headers: {
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -177,9 +176,7 @@ export default function TasksPage() {
       );
 
       if (proofPreview) {
-        URL.revokeObjectURL(
-          proofPreview
-        );
+        URL.revokeObjectURL(proofPreview);
       }
 
       setSelectedTask(null);
@@ -191,7 +188,7 @@ export default function TasksPage() {
       console.error(error);
 
       setMessage(
-        error.message ||
+        error?.message ||
           "Unable to submit proof."
       );
     } finally {
@@ -244,8 +241,7 @@ export default function TasksPage() {
               margin: 0,
               fontSize: "12px",
               fontWeight: 800,
-              letterSpacing:
-                "0.08em",
+              letterSpacing: "0.08em",
               opacity: 0.55,
             }}
           >
@@ -254,8 +250,7 @@ export default function TasksPage() {
 
           <h1
             style={{
-              margin:
-                "8px 0 10px",
+              margin: "8px 0 10px",
               fontSize: "34px",
               lineHeight: 1.1,
             }}
@@ -269,8 +264,8 @@ export default function TasksPage() {
               opacity: 0.7,
             }}
           >
-            Complete tasks, submit
-            proof and earn rewards.
+            Complete tasks, submit proof and earn
+            rewards.
           </p>
         </header>
 
@@ -279,8 +274,7 @@ export default function TasksPage() {
             style={{
               marginBottom: "20px",
               padding: "15px 18px",
-              border:
-                "1px solid #e5e5e5",
+              border: "1px solid #e5e5e5",
               borderRadius: "14px",
               background: "#fff",
               fontWeight: 600,
@@ -314,24 +308,20 @@ export default function TasksPage() {
           <section
             style={{
               background: "#fff",
-              border:
-                "1px solid #e5e5e5",
+              border: "1px solid #e5e5e5",
               borderRadius: "18px",
               padding: "40px 24px",
               textAlign: "center",
             }}
           >
-            <h2>
-              No tasks available
-            </h2>
+            <h2>No tasks available</h2>
 
             <p
               style={{
                 opacity: 0.65,
               }}
             >
-              Check back later for
-              new earning tasks.
+              Check back later for new earning tasks.
             </p>
           </section>
         ) : (
@@ -347,9 +337,7 @@ export default function TasksPage() {
               <TaskCard
                 key={task.id}
                 task={task}
-                onStart={() =>
-                  startTask(task)
-                }
+                onStart={() => startTask(task)}
               />
             ))}
           </section>
@@ -362,8 +350,7 @@ export default function TasksPage() {
             position: "fixed",
             inset: 0,
             zIndex: 1000,
-            background:
-              "rgba(0,0,0,0.55)",
+            background: "rgba(0,0,0,0.55)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -384,11 +371,9 @@ export default function TasksPage() {
             <div
               style={{
                 display: "flex",
-                justifyContent:
-                  "space-between",
+                justifyContent: "space-between",
                 gap: "20px",
-                alignItems:
-                  "flex-start",
+                alignItems: "flex-start",
               }}
             >
               <div>
@@ -405,8 +390,7 @@ export default function TasksPage() {
 
                 <h2
                   style={{
-                    margin:
-                      "6px 0",
+                    margin: "6px 0",
                     fontSize: "28px",
                   }}
                 >
@@ -423,13 +407,11 @@ export default function TasksPage() {
                 disabled={submitting}
                 style={{
                   border: 0,
-                  background:
-                    "transparent",
+                  background: "transparent",
                   fontSize: "28px",
-                  cursor:
-                    submitting
-                      ? "not-allowed"
-                      : "pointer",
+                  cursor: submitting
+                    ? "not-allowed"
+                    : "pointer",
                 }}
               >
                 ×
@@ -438,8 +420,7 @@ export default function TasksPage() {
 
             <h3
               style={{
-                margin:
-                  "18px 0 10px",
+                margin: "18px 0 10px",
                 fontSize: "22px",
               }}
             >
@@ -450,38 +431,28 @@ export default function TasksPage() {
               <div
                 style={{
                   lineHeight: 1.6,
-                  marginBottom:
-                    "20px",
-                  whiteSpace:
-                    "pre-wrap",
+                  marginBottom: "20px",
+                  whiteSpace: "pre-wrap",
                 }}
               >
-                {
-                  selectedTask.instructions
-                }
+                {selectedTask.instructions}
               </div>
             )}
 
             {selectedTask.article_url && (
               <a
-                href={
-                  selectedTask.article_url
-                }
+                href={selectedTask.article_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
                   display: "block",
                   padding: "15px",
                   textAlign: "center",
-                  border:
-                    "1px solid #ddd",
-                  borderRadius:
-                    "12px",
-                  textDecoration:
-                    "none",
+                  border: "1px solid #ddd",
+                  borderRadius: "12px",
+                  textDecoration: "none",
                   fontWeight: 800,
-                  marginBottom:
-                    "20px",
+                  marginBottom: "20px",
                 }}
               >
                 Open THE INDEX Article ↗
@@ -491,58 +462,44 @@ export default function TasksPage() {
             <div
               style={{
                 padding: "16px",
-                borderRadius:
-                  "14px",
-                background:
-                  "#f7f7f7",
-                marginBottom:
-                  "18px",
+                borderRadius: "14px",
+                background: "#f7f7f7",
+                marginBottom: "18px",
               }}
             >
               <strong>
-                Complete the task
-                and submit proof
+                Complete the task and submit proof
               </strong>
 
               <p
                 style={{
-                  margin:
-                    "8px 0 0",
+                  margin: "8px 0 0",
                   fontSize: "14px",
                   opacity: 0.65,
                   lineHeight: 1.5,
                 }}
               >
-                After completing the
-                task, select a
-                screenshot showing
-                your proof.
+                After completing the task, select a
+                screenshot showing your proof.
               </p>
             </div>
 
-            <form
-              onSubmit={submitProof}
-            >
+            <form onSubmit={submitProof}>
               <label
                 style={{
                   display: "block",
                   padding: "24px",
                   textAlign: "center",
-                  border:
-                    "2px dashed #d9d9d9",
-                  borderRadius:
-                    "14px",
-                  cursor:
-                    "pointer",
+                  border: "2px dashed #d9d9d9",
+                  borderRadius: "14px",
+                  cursor: "pointer",
                 }}
               >
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
-                  onChange={
-                    handleProofChange
-                  }
+                  onChange={handleProofChange}
                   style={{
                     display: "none",
                   }}
@@ -556,15 +513,12 @@ export default function TasksPage() {
 
                 <div
                   style={{
-                    marginTop:
-                      "6px",
-                    fontSize:
-                      "13px",
+                    marginTop: "6px",
+                    fontSize: "13px",
                     opacity: 0.6,
                   }}
                 >
-                  JPG, PNG or other
-                  image format
+                  JPG, PNG or other image format
                 </div>
               </label>
 
@@ -575,39 +529,28 @@ export default function TasksPage() {
                   style={{
                     display: "block",
                     width: "100%",
-                    maxHeight:
-                      "320px",
-                    objectFit:
-                      "contain",
-                    marginTop:
-                      "16px",
-                    borderRadius:
-                      "12px",
-                    background:
-                      "#f5f5f5",
+                    maxHeight: "320px",
+                    objectFit: "contain",
+                    marginTop: "16px",
+                    borderRadius: "12px",
+                    background: "#f5f5f5",
                   }}
                 />
               )}
 
               <button
                 type="submit"
-                disabled={
-                  submitting ||
-                  !proofFile
-                }
+                disabled={submitting || !proofFile}
                 style={{
                   width: "100%",
-                  marginTop:
-                    "18px",
+                  marginTop: "18px",
                   padding: "15px",
                   border: 0,
-                  borderRadius:
-                    "12px",
+                  borderRadius: "12px",
                   fontWeight: 800,
                   fontSize: "16px",
                   cursor:
-                    submitting ||
-                    !proofFile
+                    submitting || !proofFile
                       ? "not-allowed"
                       : "pointer",
                 }}
@@ -624,16 +567,12 @@ export default function TasksPage() {
   );
 }
 
-function TaskCard({
-  task,
-  onStart,
-}) {
+function TaskCard({ task, onStart }) {
   return (
     <article
       style={{
         background: "#fff",
-        border:
-          "1px solid #e5e5e5",
+        border: "1px solid #e5e5e5",
         borderRadius: "18px",
         padding: "20px",
       }}
@@ -641,11 +580,9 @@ function TaskCard({
       <div
         style={{
           display: "flex",
-          justifyContent:
-            "space-between",
+          justifyContent: "space-between",
           gap: "15px",
-          alignItems:
-            "flex-start",
+          alignItems: "flex-start",
         }}
       >
         <div>
@@ -654,20 +591,17 @@ function TaskCard({
               fontSize: "11px",
               fontWeight: 800,
               opacity: 0.55,
-              textTransform:
-                "uppercase",
+              textTransform: "uppercase",
             }}
           >
-            {task.type ||
-              "TASK"}
+            {task.type || "TASK"}
           </span>
 
           <h2
             style={{
               fontSize: "20px",
               lineHeight: 1.3,
-              margin:
-                "8px 0",
+              margin: "8px 0",
             }}
           >
             {task.title}
@@ -676,15 +610,12 @@ function TaskCard({
 
         <strong
           style={{
-            whiteSpace:
-              "nowrap",
+            whiteSpace: "nowrap",
             fontSize: "18px",
           }}
         >
           ₦
-          {formatNaira(
-            task.reward_kobo
-          )}
+          {formatNaira(task.reward_kobo)}
         </strong>
       </div>
 
@@ -708,29 +639,24 @@ function TaskCard({
           padding: "14px",
           border: 0,
           borderRadius: "12px",
-          fontWeight: 800,
+          fontWeight: 900,
+          fontSize: "16px",
           cursor: "pointer",
         }}
       >
         Start Task — ₦
-        {formatNaira(
-          task.reward_kobo
-        )}
+        {formatNaira(task.reward_kobo)}
       </button>
     </article>
   );
 }
 
-function Stat({
-  label,
-  value,
-}) {
+function Stat({ label, value }) {
   return (
     <div
       style={{
         background: "#fff",
-        border:
-          "1px solid #e5e5e5",
+        border: "1px solid #e5e5e5",
         borderRadius: "15px",
         padding: "18px",
       }}
@@ -756,18 +682,11 @@ function Stat({
   );
 }
 
-function formatNaira(
-  amountKobo
-) {
-  const amount =
-    Number(amountKobo || 0) /
-    100;
+function formatNaira(amountKobo) {
+  const amount = Number(amountKobo || 0) / 100;
 
-  return amount.toLocaleString(
-    "en-NG",
-    {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }
-  );
+  return amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
