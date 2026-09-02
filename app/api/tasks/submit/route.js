@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const DEVELOPMENT_USER_ID =
-  process.env.DEVELOPMENT_USER_ID;
-
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -14,17 +11,6 @@ const BUCKET = "pitnex-proofs";
 
 export async function POST(request) {
   try {
-    if (!DEVELOPMENT_USER_ID) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "PITNEX user authentication is not configured yet.",
-        },
-        { status: 503 }
-      );
-    }
-
     if (
       !SUPABASE_URL ||
       !SUPABASE_SERVICE_ROLE_KEY
@@ -32,12 +18,66 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Supabase Storage is not configured.",
+          error: "Supabase Storage is not configured.",
         },
         { status: 503 }
       );
     }
+
+    /*
+     * Get the real logged-in Supabase user.
+     */
+    const authorization =
+      request.headers.get("authorization");
+
+    if (!authorization?.startsWith("Bearer ")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "You must be logged in.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const accessToken =
+      authorization.replace("Bearer ", "").trim();
+
+    const userResponse = await fetch(
+      `${SUPABASE_URL}/auth/v1/user`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+        },
+        cache: "no-store",
+      }
+    );
+
+    if (!userResponse.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your session has expired. Please log in again.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const authUser = await userResponse.json();
+
+    if (!authUser?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "You must be logged in.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const userId = authUser.id;
 
     const formData =
       await request.formData();
@@ -65,8 +105,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Screenshot proof is required.",
+          error: "Screenshot proof is required.",
         },
         { status: 400 }
       );
@@ -79,8 +118,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Proof must be an image.",
+          error: "Proof must be an image.",
         },
         { status: 400 }
       );
@@ -90,8 +128,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Screenshot must be 10MB or smaller.",
+          error: "Screenshot must be 10MB or smaller.",
         },
         { status: 400 }
       );
@@ -124,36 +161,35 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "This task is no longer available.",
+          error: "This task is no longer available.",
         },
         { status: 400 }
       );
     }
 
+    /*
+     * IMPORTANT:
+     * Check the task for the actual logged-in user.
+     */
     const existing = await prisma.$queryRaw`
       SELECT
         id,
         status,
         proof_image_url
       FROM pitnex_user_tasks
-      WHERE user_id =
-        ${DEVELOPMENT_USER_ID}::uuid
-        AND task_id =
-        ${taskId}::uuid
+      WHERE user_id = ${userId}::uuid
+        AND task_id = ${taskId}::uuid
       LIMIT 1
     `;
 
     if (existing.length) {
-      const status =
-        existing[0].status;
+      const status = existing[0].status;
 
       if (status === "COMPLETED") {
         return NextResponse.json(
           {
             success: false,
-            error:
-              "You have already completed this task.",
+            error: "You have already completed this task.",
           },
           { status: 409 }
         );
@@ -163,8 +199,7 @@ export async function POST(request) {
         return NextResponse.json(
           {
             success: false,
-            error:
-              "This task is already pending review.",
+            error: "This task is already pending review.",
           },
           { status: 409 }
         );
@@ -176,11 +211,10 @@ export async function POST(request) {
         ?.split(".")
         .pop()
         ?.toLowerCase()
-        .replace(/[^a-z0-9]/g, "") ||
-      "jpg";
+        .replace(/[^a-z0-9]/g, "") || "jpg";
 
     const filePath =
-      `${DEVELOPMENT_USER_ID}/${taskId}-${Date.now()}.${extension}`;
+      `${userId}/${taskId}-${Date.now()}.${extension}`;
 
     const fileBuffer =
       Buffer.from(
@@ -224,12 +258,6 @@ export async function POST(request) {
       );
     }
 
-    /*
-     * Keep the storage path rather than making
-     * the proof publicly accessible.
-     *
-     * Admin review can generate a signed URL later.
-     */
     const proofImageUrl =
       `${BUCKET}/${filePath}`;
 
@@ -240,8 +268,8 @@ export async function POST(request) {
           status = 'PENDING',
           proof_image_url = ${proofImageUrl},
           submitted_at = NOW()
-        WHERE id =
-          ${existing[0].id}::uuid
+        WHERE id = ${existing[0].id}::uuid
+          AND user_id = ${userId}::uuid
       `;
     } else {
       await prisma.$executeRaw`
@@ -253,7 +281,7 @@ export async function POST(request) {
           submitted_at
         )
         VALUES (
-          ${DEVELOPMENT_USER_ID}::uuid,
+          ${userId}::uuid,
           ${taskId}::uuid,
           'PENDING',
           ${proofImageUrl},
@@ -264,8 +292,7 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message:
-        "Proof submitted successfully.",
+      message: "Proof submitted successfully.",
       status: "PENDING",
       rewardNaira:
         Number(task.reward_kobo) / 100,
