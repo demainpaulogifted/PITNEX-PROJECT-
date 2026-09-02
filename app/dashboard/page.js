@@ -80,9 +80,26 @@ export default function DashboardPage() {
 
     async function loadWallet() {
       try {
+        setWalletLoading(true);
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          throw new Error(
+            "Your session has expired. Please log in again."
+          );
+        }
+
         const response = await fetch(
           "/api/wallet/balance",
           {
+            method: "GET",
+            headers: {
+              Authorization:
+                `Bearer ${session.access_token}`,
+            },
             cache: "no-store",
           }
         );
@@ -108,7 +125,7 @@ export default function DashboardPage() {
 
         if (mounted) {
           setError(
-            err.message ||
+            err?.message ||
               "Unable to load wallet balance."
           );
         }
@@ -139,6 +156,16 @@ export default function DashboardPage() {
     setUpgradeLoading(true);
 
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error(
+          "Your session has expired. Please log in again."
+        );
+      }
+
       const response = await fetch(
         "/api/payments/initialize",
         {
@@ -146,6 +173,8 @@ export default function DashboardPage() {
           headers: {
             "Content-Type":
               "application/json",
+            Authorization:
+              `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({}),
         }
@@ -161,6 +190,12 @@ export default function DashboardPage() {
         );
       }
 
+      if (!data.authorizationUrl) {
+        throw new Error(
+          "Paystack did not return a payment URL."
+        );
+      }
+
       window.location.href =
         data.authorizationUrl;
     } catch (err) {
@@ -170,7 +205,7 @@ export default function DashboardPage() {
       );
 
       setError(
-        err.message ||
+        err?.message ||
           "Unable to start upgrade payment."
       );
 
@@ -286,7 +321,9 @@ export default function DashboardPage() {
               <Wallet size={24} />
             </div>
 
-            <span>Available balance</span>
+            <span>
+              Available balance
+            </span>
           </div>
 
           <div className="balance">
