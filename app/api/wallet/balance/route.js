@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { getWalletBalance } from "@/lib/wallet";
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const supabase =
-      await createSupabaseServerClient();
+    const user = await getAuthenticatedUser(request);
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -22,24 +16,19 @@ export async function GET() {
       );
     }
 
-    const wallet =
-      await getWalletBalance(user.id);
+    const wallet = await getWalletBalance(user.id);
 
     return NextResponse.json({
       success: true,
       wallet,
     });
   } catch (error) {
-    console.error(
-      "Wallet balance error:",
-      error
-    );
+    console.error("Wallet balance error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Unable to load wallet balance.",
+        error: "Unable to load wallet balance.",
       },
       { status: 500 }
     );
